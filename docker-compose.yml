@@ -1,0 +1,184 @@
+# finance.sh — open-source self-hosted financial control (Community Edition, AGPL-3.0)
+# Default stack: 2 containers — postgres + app (Go binary serving the embedded
+# SPA + JSON API on one HTTP port; no bundled nginx/TLS).
+#   - App roda o scheduler como goroutine in-process.
+#   - A SPA é buildada e EMBUTIDA no binário (go:embed) — sem container web dedicado.
+#   - TLS: traga seu próprio reverse proxy (Traefik, Caddy, Nginx Proxy Manager).
+#   - A landing page (marketing) é um projeto/deploy à parte; não faz parte deste stack.
+# Única dependência externa: Postgres. Anexos vivem em BYTEA; rate limit/cache são
+# in-memory no app. Admin do DB via `psql` (docker exec) ou cliente local.
+# Copy .env.example to .env and run: docker compose up -d --build
+# Targets the current Compose spec (no obsolete top-level `version:` key).
+#
+# HARDENING SUMMARY
+#   - Two networks: finance-sh-edge (web tier) and finance-sh-data (internal: true).
+#     Postgres vive APENAS na rede interna — sem rota externa.
+#   - Postgres host port binds to 127.0.0.1 only; the app port is published for
+#     your reverse proxy (bind it to 127.0.0.1 too if the proxy is on this host).
+#   - TLS is terminated by YOUR reverse proxy — none is bundled.
+#   - Per-service: no-new-privileges, cap_drop ALL, read_only rootfs + tmpfs,
+#     mem/pids limits, log rotation.
+#   - Images pinned by tag. PROD TODO: pin by digest (image@sha256:...).
+
+# Reusable JSON-file log rotation (anchored, merged into each service).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine          # PROD: pin by digest, e.g. postgres@sha256:...
+    container_name: finance-sh-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-finance_sh}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-finance_sh}
+      POSTGRES_DB: ${DB_NAME:-finance_sh}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      # Local tooling only (psql / DBeaver / IDE plugins). Bound to loopback — never exposed
+      # on the LAN/Internet. Override the host port via PG_PORT.
+      - "127.0.0.1:${PG_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-finance_sh} -d ${DB_NAME:-finance_sh}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 200
+    logging: *default-logging
+    networks:
+      - finance-sh-data
+    # ------------------------------------------------------------------------
+    # POSTGRES SSL (deferred for dev).
+    # DB_SSLMODE=prefer (the dev default) lets the backend connect with or
+    # without server TLS, so the stack boots cleanly with no server cert.
+    # PROD TODO: ship a server cert + key, mount them, and start postgres with
+    # SSL on, then set DB_SSLMODE=require (or verify-full). Example:
+    #   command: >
+    #     -c ssl=on
+    #     -c ssl_cert_file=/var/lib/postgresql/server.crt
+    #     -c ssl_key_file=/var/lib/postgresql/server.key
+    # (The key must be chmod 600 and owned by the postgres user, which is why
+    #  this is deferred rather than auto-generated in a one-shot here.)
+    # read_only is intentionally NOT set on postgres: it manages its own data
+    # dir, WAL, sockets and config under the pgdata volume + /tmp + /run.
+    # ------------------------------------------------------------------------
+
+  app:
+    # Single application container: the Go binary serves BOTH the embedded SPA
+    # (internal/web, go:embed) and the JSON API on one HTTP port. No bundled
+    # nginx/TLS — put your own reverse proxy (Traefik, Caddy, Nginx Proxy
+    # Manager, ...) in front to terminate TLS. See README "Reverse proxy".
+    # Scheduler roda como goroutine in-process por default (JOBS_IN_PROCESS=true).
+    # Setar false desliga o scheduler (ex.: múltiplas réplicas onde só uma agenda).
+    build:
+      # Context = project root so the Dockerfile reaches both frontend/ (SPA
+      # build stage) and backend/ (Go build stage).
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        # Same-origin: the SPA and API are served by this very binary.
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+        # Landing site is deployed separately. Empty hides the "Contratar" link.
+        VITE_LANDING_URL: ${VITE_LANDING_URL:-}
+    container_name: finance-sh-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_PORT: "8080"
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      # Public URL the app is reached at (used in emails/links). Set this to your
+      # reverse-proxy hostname in production, e.g. https://finance.example.com.
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8090}
+      # Primeiro acesso. Default false = setup wizard (você cria o admin pela web,
+      # seguro). true = deploy headless: cria admin no boot e loga a senha gerada.
+      BOOTSTRAP_ADMIN: ${BOOTSTRAP_ADMIN:-false}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@finance.sh}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_ORG_NAME: ${ADMIN_ORG_NAME:-Minha Organização}
+      # Field-level encryption of PII / 2FA secrets.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set}
+      # Inside the network the DB is reachable by service name.
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER:-finance_sh}
+      DB_PASSWORD: ${DB_PASSWORD:-finance_sh}
+      DB_NAME: ${DB_NAME:-finance_sh}
+      DB_SSLMODE: ${DB_SSLMODE:-prefer}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me}
+      JWT_ACCESS_TTL_MIN: ${JWT_ACCESS_TTL_MIN:-15}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
+      LOGIN_LOCKOUT_MIN: ${LOGIN_LOCKOUT_MIN:-15}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-no-reply@finance.sh}
+      # Same-origin in production (SPA + API share the binary), so CORS only
+      # matters for the Vite dev server. Add your proxy origin if you split them.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8090,http://localhost:5173}
+      RATE_LIMIT_RPM: ${RATE_LIMIT_RPM:-120}
+      RETENTION_DAYS: ${RETENTION_DAYS:-90}
+      TERMS_VERSION: ${TERMS_VERSION:-1.0}
+      SEED: ${SEED:-false}
+      # Scheduler in-process: a app roda jobs de recorrência/notificações/purga LGPD
+      # como goroutine. Setar false desliga o scheduler.
+      JOBS_IN_PROCESS: ${JOBS_IN_PROCESS:-true}
+      WORKER_INTERVAL_SEC: ${WORKER_INTERVAL_SEC:-3600}
+    expose:
+      - "8080"
+    ports:
+      # Published HTTP entrypoint (SPA + API, same origin). Put your own reverse
+      # proxy in front for TLS. If the proxy runs on THIS host, prefer binding to
+      # loopback ("127.0.0.1:${APP_PORT:-8090}:8080"); if it runs elsewhere or
+      # you want direct LAN access, keep it published as below.
+      - "${APP_PORT:-8090}:8080"
+    healthcheck:
+      # The runtime image is alpine-based and ships wget. If a future image is
+      # shell-free this fails closed; depends_on ordering still applies.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 512m
+    pids_limit: 200
+    logging: *default-logging
+    networks:
+      # On the edge net so the reverse proxy can reach it, and on the data net
+      # to talk to postgres.
+      - finance-sh-edge
+      - finance-sh-data
+
+volumes:
+  pgdata:
+
+networks:
+  # Web tier: where your own reverse proxy attaches to reach the app. Join your
+  # proxy to this network (external) or reach the app via its published port.
+  finance-sh-edge:
+    driver: bridge
+  # Data tier: no route off the host. Postgres vive aqui;
+  # backend junta-se a esta rede para alcançá-lo.
+  finance-sh-data:
+    driver: bridge
+    internal: true

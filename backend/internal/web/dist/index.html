@@ -1,0 +1,17 @@
+<!doctype html>
+<!--
+  Placeholder app shell. The Docker build replaces this entire dist/ directory
+  with the real `npm run build` output before compiling the Go binary, so the
+  production image serves the actual SPA. This file exists only so `go build`
+  and CI succeed when no frontend build is present (e.g. backend-only checks).
+-->
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>finance.sh</title>
+  </head>
+  <body>
+    <p>finance.sh — frontend bundle not built into this binary.</p>
+    <p>Run the Docker build (which bakes in the SPA) or build the frontend and embed dist/.</p>
+  </body>
+</html>

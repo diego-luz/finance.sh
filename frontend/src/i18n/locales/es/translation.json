@@ -1,0 +1,334 @@
+{
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "new": "Nuevo",
+    "back": "Volver",
+    "confirm": "Confirmar",
+    "search": "Buscar",
+    "searchPlaceholder": "Buscar…",
+    "loading": "Cargando",
+    "noResults": "Sin resultados",
+    "close": "Cerrar",
+    "openMenu": "Abrir menú",
+    "closeMenu": "Cerrar menú",
+    "toast": {
+      "saved": "Guardado correctamente.",
+      "deleted": "Eliminado correctamente.",
+      "error": "Ocurrió un error. Inténtalo de nuevo.",
+      "genericSuccess": "Operación completada correctamente.",
+      "genericError": "No se pudo completar la operación."
+    }
+  },
+  "nav": {
+    "menu": "Menú",
+    "dashboard": "Visión general",
+    "transactions": "Transacciones",
+    "recurrences": "Recurrencias",
+    "accountsPayable": "Cuentas por Pagar",
+    "accountsReceivable": "Cuentas por Cobrar",
+    "forecast": "Proyección",
+    "reports": "Informes",
+    "accounts": "Cuentas",
+    "creditCards": "Tarjetas",
+    "contacts": "Contactos",
+    "categories": "Categorías",
+    "tags": "Etiquetas",
+    "categorization": "Categorización",
+    "budgets": "Presupuestos",
+    "goals": "Metas",
+    "team": "Equipo",
+    "audit": "Auditoría",
+    "settings": "Configuración",
+    "operational": "Operativo",
+    "allSystemsOperational": "Todos los sistemas funcionando.",
+    "logout": "Salir",
+    "myProfile": "Mi perfil",
+    "userMenu": "Menú del usuario"
+  },
+  "footer": {
+    "rights": "© {{year}} finance.sh. Todos los derechos reservados.",
+    "terms": "Términos de Uso",
+    "privacy": "Privacidad"
+  },
+  "auth": {
+    "tagline": "Control financiero open-source autoalojado",
+    "brandHeadline": "Control financiero inteligente para tu operación.",
+    "brandSubtitle": "Centraliza cuentas, transacciones e informes en una sola caja fuerte — con la claridad que tu empresa necesita para crecer.",
+    "feature1": "Flujo de caja e informes en tiempo real",
+    "feature2": "Multiorganización con control de acceso",
+    "fields": {
+      "email": "Correo electrónico",
+      "password": "Contraseña",
+      "name": "Tu nombre",
+      "organizationName": "Nombre de la empresa",
+      "organizationCurrency": "Moneda de la organización",
+      "newPassword": "Nueva contraseña",
+      "confirmPassword": "Confirmar contraseña",
+      "verificationCode": "Código de verificación"
+    },
+    "placeholders": {
+      "email": "tu@empresa.com",
+      "name": "Juan Pérez",
+      "organizationName": "Mi Empresa S.A.",
+      "password": "••••••••",
+      "passwordMin": "Mínimo de 8 caracteres",
+      "code": "000000"
+    },
+    "login": {
+      "title": "Inicia sesión en tu cuenta",
+      "subtitle": "Accede a tu control financiero.",
+      "forgotPassword": "¿Olvidaste tu contraseña?",
+      "submit": "Entrar",
+      "noAccount": "¿Aún no tienes cuenta?"
+    },
+    "mfa": {
+      "title": "Verificación en dos pasos",
+      "subtitle": "Introduce el código de 6 dígitos de tu aplicación de autenticación.",
+      "protected": "Tu cuenta está protegida con autenticación en dos pasos.",
+      "submit": "Verificar y entrar",
+      "backToLogin": "Volver al inicio de sesión"
+    },
+    "register": {
+      "title": "Crea tu cuenta",
+      "subtitle": "Empieza a organizar las finanzas de tu empresa en minutos.",
+      "acceptTermsPrefix": "He leído y acepto los",
+      "termsOfUse": "Términos de Uso",
+      "and": "y la",
+      "privacyPolicy": "Política de Privacidad",
+      "submit": "Crear cuenta",
+      "hasAccount": "¿Ya tienes una cuenta?",
+      "signIn": "Entrar"
+    },
+    "forgot": {
+      "title": "Recuperar contraseña",
+      "subtitle": "Introduce tu correo y te enviaremos un enlace para restablecer la contraseña.",
+      "submit": "Enviar enlace de recuperación",
+      "backToLogin": "Volver al inicio de sesión",
+      "sentTitle": "Revisa tu correo",
+      "sentSubtitle": "Enviamos instrucciones para restablecer tu contraseña.",
+      "sentBodyPrefix": "Si existe una cuenta para",
+      "sentBodySuffix": ", recibirás un enlace de restablecimiento en breve.",
+      "noEmailTitle": "Solicitud registrada",
+      "noEmailSubtitle": "Este servidor no envía correos.",
+      "noEmailBody": "El envío de correo no está configurado en esta instancia. Si administras el servidor, el enlace de restablecimiento aparece en el log (docker compose logs app) o usa el comando de reset en la terminal. De lo contrario, pide al administrador de la instancia."
+    },
+    "reset": {
+      "title": "Restablecer contraseña",
+      "subtitle": "Elige una nueva contraseña para acceder a tu cuenta.",
+      "submit": "Restablecer contraseña",
+      "backToLogin": "Volver al inicio de sesión",
+      "invalidTitle": "Enlace inválido",
+      "invalidSubtitle": "No fue posible identificar el token de restablecimiento.",
+      "invalidBody": "El enlace de restablecimiento es inválido o ha expirado. Solicita un nuevo enlace de recuperación de contraseña.",
+      "requestNew": "Solicitar un nuevo enlace"
+    },
+    "verify": {
+      "title": "Verificación de correo",
+      "subtitle": "Confirmación de tu cuenta en finance.sh.",
+      "verifyingTitle": "Confirmando tu correo…",
+      "verifyingText": "Espera un momento mientras validamos tu enlace.",
+      "successTitle": "¡Correo confirmado!",
+      "successText": "Tu cuenta está verificada. Ya puedes acceder a la plataforma de forma segura.",
+      "errorTitle": "No se pudo confirmar",
+      "errorText": "El enlace puede haber expirado o ya haber sido utilizado.",
+      "errorFallback": "No se pudo confirmar el correo.",
+      "missingTitle": "Enlace inválido",
+      "missingText": "No se proporcionó ningún token de verificación. Usa el enlace enviado a tu correo.",
+      "goToDashboard": "Ir al panel",
+      "signIn": "Entrar",
+      "backToDashboard": "Volver al panel",
+      "backToLogin": "Volver al inicio de sesión"
+    },
+    "errors": {
+      "nameMin": "Ingresa tu nombre completo (mín. 2 caracteres).",
+      "emailRequired": "Ingresa el correo electrónico.",
+      "emailInvalid": "Correo inválido.",
+      "passwordMin": "La contraseña debe tener al menos 8 caracteres.",
+      "confirmRequired": "Confirma la contraseña.",
+      "passwordsMismatch": "Las contraseñas no coinciden.",
+      "orgNameMin": "Ingresa el nombre de la organización (mín. 2 caracteres)."
+    }
+  },
+  "dashboard": {
+    "eyebrow": "Panel",
+    "title": "Visión general",
+    "description": "Sigue la salud financiera de tu organización.",
+    "kpi": {
+      "currentBalance": "Saldo actual",
+      "monthIncome": "Ingresos del mes",
+      "monthExpense": "Gastos del mes",
+      "monthResult": "Resultado del mes",
+      "balanceSum": "Suma de las cuentas",
+      "surplus": "Superávit",
+      "deficit": "Déficit"
+    },
+    "loadError": "No se pudo cargar el panel. Verifica tu conexión e inténtalo de nuevo.",
+    "cashFlow": {
+      "eyebrow": "Flujo de caja",
+      "title": "Ingresos vs Gastos",
+      "subtitle": "Últimos 6 meses",
+      "income": "Ingresos",
+      "expense": "Gastos"
+    },
+    "topCategories": {
+      "eyebrow": "Distribución",
+      "title": "Categorías principales",
+      "subtitle": "Gastos del mes",
+      "emptyTitle": "Sin datos de categorías",
+      "emptyDescription": "Las transacciones de este mes aparecerán agrupadas aquí."
+    },
+    "upcomingBills": {
+      "title": "Cuentas por vencer",
+      "subtitle": "Próximos pagos",
+      "emptyTitle": "Todo al día",
+      "emptyDescription": "No hay cuentas por vencer en este momento.",
+      "due": "Vence {{date}}"
+    },
+    "accountsSummary": {
+      "title": "Tus cuentas",
+      "subtitle": "Saldo por cuenta",
+      "emptyTitle": "Ninguna cuenta registrada",
+      "emptyDescription": "Registra una cuenta para empezar a registrar transacciones."
+    },
+    "goals": {
+      "title": "Metas",
+      "subtitle": "Progreso de tus objetivos",
+      "seeAll": "Ver todas",
+      "emptyTitle": "Ninguna meta",
+      "emptyDescription": "Crea metas para seguir tus objetivos."
+    },
+    "creditCards": {
+      "title": "Tarjetas",
+      "subtitle": "Uso del límite",
+      "seeAll": "Ver todas",
+      "emptyTitle": "Ninguna tarjeta",
+      "emptyDescription": "Registra tarjetas para seguir sus límites.",
+      "available": "disp."
+    },
+    "forecast": {
+      "title": "Proyección de caja",
+      "subtitle": "Próximos 3 meses",
+      "seeForecast": "Ver proyección",
+      "currentBalance": "Saldo actual",
+      "projectedBalance": "Saldo proyectado (fin)",
+      "negativeWarning": "El saldo proyectado es negativo en algún mes del período.",
+      "positiveNote": "El saldo proyectado es positivo durante todo el período."
+    }
+  },
+  "settings": {
+    "eyebrow": "Cuenta",
+    "title": "Configuración",
+    "description": "Gestiona tu perfil, organización y preferencias.",
+    "profile": {
+      "eyebrow": "01 · Perfil",
+      "title": "Tu perfil",
+      "subtitle": "Información de tu cuenta de usuario.",
+      "emailVerified": "Correo verificado",
+      "emailNotVerified": "Correo no verificado",
+      "resendVerification": "Reenviar confirmación",
+      "editProfile": "Editar perfil"
+    },
+    "appearance": {
+      "eyebrow": "03 · Apariencia",
+      "title": "Tema y privacidad",
+      "subtitle": "Personaliza la apariencia y cómo se muestran los valores.",
+      "darkMode": "Modo oscuro",
+      "lightMode": "Modo claro",
+      "themeSavedHint": "Preferencia guardada en este dispositivo.",
+      "valuesHidden": "Valores ocultos",
+      "valuesVisible": "Valores visibles",
+      "valuesHint": "Oculta los valores monetarios en pantalla. Guardado en este dispositivo."
+    },
+    "edition": {
+      "eyebrow": "04 · Acerca de",
+      "title": "finance.sh",
+      "license": "AGPL-3.0",
+      "description": "100% open-source, autoalojada. Sin límites de usuarios, organizaciones o transacciones, y sin ediciones de pago.",
+      "github": "★ Star en GitHub"
+    },
+    "twoFactor": {
+      "title": "Autenticación en dos pasos (2FA)"
+    },
+    "organization": {
+      "title": "Organización"
+    },
+    "sessions": {
+      "title": "Sesiones activas"
+    },
+    "privacyData": {
+      "title": "Privacidad y Datos"
+    },
+    "export": {
+      "eyebrow": "Datos",
+      "title": "Exportar datos",
+      "subtitle": "Descarga tus datos en Excel, PDF o CSV."
+    },
+    "danger": {
+      "eyebrow": "Zona de riesgo",
+      "title": "Cerrar sesión",
+      "subtitle": "Tendrás que iniciar sesión de nuevo para acceder al panel.",
+      "logout": "Cerrar sesión"
+    }
+  },
+  "language": {
+    "label": "Idioma",
+    "hint": "Idioma de la interfaz. Guardado en este dispositivo.",
+    "pt-BR": "Português",
+    "en": "English",
+    "es": "Español"
+  },
+  "setup": {
+    "title": "Configuración inicial",
+    "subtitle": "Bienvenido a finance.sh. Vamos a crear el primer usuario y tu organización.",
+    "stepCounter": "Paso {{current}} de {{total}}",
+    "success": "¡Plataforma configurada correctamente!",
+    "steps": {
+      "user": {
+        "title": "Administrador",
+        "short": "Administrador",
+        "passwordHint": "Mínimo 8 caracteres. Usa el generador para una contraseña fuerte.",
+        "fields": {
+          "name": "Tu nombre",
+          "email": "Correo electrónico",
+          "password": "Contraseña",
+          "confirmPassword": "Confirmar contraseña"
+        }
+      },
+      "org": {
+        "title": "Organización",
+        "short": "Organización",
+        "hint": "La moneda principal define el formato de visualización por defecto. Puedes cambiarla luego.",
+        "fields": {
+          "name": "Nombre de la organización",
+          "currency": "Moneda principal"
+        }
+      },
+      "review": {
+        "title": "Revisión",
+        "short": "Revisión",
+        "adminTitle": "Administrador",
+        "orgTitle": "Organización",
+        "notice": "Esta es la primera cuenta de la plataforma. Tendrá acceso total y podrá crear más usuarios después."
+      }
+    },
+    "actions": {
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "finish": "Finalizar y entrar",
+      "suggestPassword": "Sugerir contraseña segura",
+      "copy": "Copiar",
+      "copied": "Copiada"
+    },
+    "errors": {
+      "already_initialized": "La plataforma ya fue configurada. Inicia sesión para continuar.",
+      "weak_password": "La contraseña es muy débil. Usa al menos 8 caracteres.",
+      "invalid_currency": "Moneda inválida.",
+      "generic": "No se pudo completar la configuración. Inténtalo de nuevo.",
+      "emptyPassword": "Rellena o genera una contraseña antes de copiar.",
+      "copyFailed": "No se pudo copiar. Selecciona y copia manualmente."
+    }
+  }
+}

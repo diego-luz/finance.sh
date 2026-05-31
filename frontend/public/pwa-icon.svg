@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="finance.sh">
+  <!-- Emerald rounded-square brand tile -->
+  <rect width="512" height="512" rx="112" fill="#10b981"/>
+  <!-- Mark (white-on-emerald): target ring + shell prompt >$ -->
+  <g transform="translate(256 256) scale(17) translate(-12 -12)" stroke="#ffffff" fill="none">
+    <circle cx="12" cy="12" r="11" stroke-width="1.6"/>
+    <path d="M7.5 8.8L11 12L7.5 15.2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="14.8" y="15.9" text-anchor="middle" font-size="11" font-family="monospace" font-weight="700" fill="#ffffff" stroke="none">$</text>
+  </g>
+</svg>

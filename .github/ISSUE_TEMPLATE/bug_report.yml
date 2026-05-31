@@ -1,0 +1,118 @@
+name: 🐛 Bug report
+description: Reportar um bug em finance.sh
+title: "[bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por reportar! Antes de prosseguir:
+        - Pesquise em [issues existentes](https://github.com/finance-sh/finance-sh/issues?q=is%3Aissue) se já não foi reportado.
+        - Veja a [documentação](https://github.com/finance-sh/finance-sh/tree/main/docs) e o [README](https://github.com/finance-sh/finance-sh/blob/main/README.md).
+        - **Nunca cole secrets, tokens, JWT ou dados pessoais reais.** Sanitize antes de submeter.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Resumo
+      description: Descrição curta do bug em 1-2 linhas.
+      placeholder: "Ex: Login falha com 500 quando o e-mail contém apóstrofo."
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Passos para reproduzir
+      description: Sequência mínima e determinística.
+      placeholder: |
+        1. Subir o stack com `docker compose up -d`
+        2. Acessar `http://localhost:8090/login`
+        3. Submeter `usuario'@example.com` + senha qualquer
+        4. Observar erro
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportamento esperado
+      placeholder: "Login deveria validar formato e retornar 400 com mensagem clara."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Comportamento observado
+      placeholder: "Backend retorna 500. Frontend mostra 'Erro interno'."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / stack trace
+      description: |
+        Saída relevante de `docker compose logs backend --tail=200`, console do navegador (F12), ou stderr de execução bare-metal.
+        Use ` ``` ` para preservar formatação. Sanitize secrets.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Versão do finance.sh
+      description: "Resultado de `git rev-parse --short HEAD` ou tag (`v0.1.0`)."
+      placeholder: "v0.1.0 ou commit abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: Tipo de instalação
+      options:
+        - Docker Compose (recomendado)
+        - Bare-metal Go (dev loop)
+        - Kubernetes (Helm/manifests)
+        - Outro (descrever no campo "Ambiente")
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Ambiente
+      description: SO + versões + onde está rodando.
+      placeholder: |
+        - SO: Debian 13 / Ubuntu 24.04 / macOS 15 / Windows 11 WSL2
+        - Docker: 28.0.1
+        - Compose: v2.34.0
+        - Navegador: Firefox 142 / Chrome 138 / Safari 18
+        - Acesso via: localhost / LAN IP / domínio
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Contexto adicional
+      description: Screenshots, vídeos, workarounds tentados, tudo que ajude a entender.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmação
+      options:
+        - label: Li o [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) e concordo em segui-lo.
+          required: true
+        - label: Pesquisei issues existentes e este não é duplicado.
+          required: true
+        - label: Não incluí secrets, tokens ou dados pessoais reais no relatório.
+          required: true

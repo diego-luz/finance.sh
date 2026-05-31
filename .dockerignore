@@ -1,0 +1,32 @@
+# Build context = project root (backend/Dockerfile bakes frontend + backend).
+# Keep the context small and free of secrets / heavy artifacts.
+
+# VCS & CI
+.git
+.gitignore
+.github
+
+# Secrets & local config
+.env
+.env.*
+*.local
+
+# Node (frontend) — deps and prior builds are rebuilt inside the image
+frontend/node_modules
+frontend/dist
+
+# Go build artifacts / placeholder embed bundle (rebuilt in the image)
+backend/bin
+backend/internal/web/dist
+*.exe
+*.test
+*.out
+
+# Editor / OS noise
+.idea
+.vscode
+*.swp
+.DS_Store
+
+# Docs site assets not needed at build (backend/docs IS copied explicitly)
+docs/screenshots

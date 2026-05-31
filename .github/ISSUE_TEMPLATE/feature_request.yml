@@ -1,0 +1,98 @@
+name: ✨ Feature request
+description: Propor uma funcionalidade nova ou melhoria
+title: "[feat]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado pela ideia! Para acelerar a discussão:
+        - Verifique se já existe issue/discussão sobre o assunto.
+        - Mudanças grandes (refactor, nova área do produto, mudança de stack) devem começar como [Discussion](https://github.com/finance-sh/finance-sh/discussions) antes de virar issue.
+        - Features claramente comerciais (OCR, IA, Open Banking BR, multi-tenant gerenciado) podem ser direcionadas pro roadmap **PRO/Cloud** em vez de Community.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Qual problema isso resolve?
+      description: Ponto de vista do usuário, não da solução. "Quando eu X, acontece Y, e eu queria Z."
+      placeholder: "Quando importo OFX do Itaú, lançamentos vêm sem categoria e preciso categorizar manualmente 200 linhas."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solução proposta
+      description: Como você imagina que deveria funcionar.
+      placeholder: "Aplicar regras de categorização automática baseadas no descritivo do lançamento, com tela de revisão antes de confirmar."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+      description: Outras abordagens que você pensou e por que rejeitou.
+      placeholder: "Categorizar manualmente com atalhos de teclado — ainda é lento pra 200+ lançamentos por importação."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Quem é afetado?
+      multiple: true
+      options:
+        - Pessoa Física
+        - MEI / Autônomo
+        - Microempresa
+        - Homelab / DevOps (self-hoster)
+        - Contribuidor (DX / dev experience)
+        - Mantenedor (operacional / build)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: edition
+    attributes:
+      label: Qual edição faz mais sentido?
+      options:
+        - Community (AGPL, grátis)
+        - PRO (paga, plugin opcional)
+        - Cloud (hospedado)
+        - Não tenho certeza
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Contexto adicional
+      description: Mockups, screenshots de produtos similares, links para discussões, dados de uso, etc.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contrib
+    attributes:
+      label: Disposto a contribuir?
+      options:
+        - label: Posso ajudar com código (PR).
+          required: false
+        - label: Posso ajudar com documentação.
+          required: false
+        - label: Posso ajudar com testes / validação.
+          required: false
+        - label: Só estou propondo a ideia.
+          required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Confirmação
+      options:
+        - label: Li o [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md).
+          required: true
+        - label: Pesquisei e este pedido não está duplicado.
+          required: true

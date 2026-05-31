@@ -1,0 +1,3753 @@
+openapi: 3.0.3
+info:
+  title: finance.sh API
+  description: >
+    API REST do finance.sh, um SaaS financeiro multi-tenant. Todas as respostas usam
+    um envelope padrão `{ success, data, error, meta }`. Endpoints protegidos
+    exigem um token JWT (Authorization: Bearer) e o cabeçalho
+    `X-Organization-ID` para selecionar o tenant ativo.
+  version: 1.0.0
+servers:
+  - url: /api/v1
+    description: Base path da API
+
+tags:
+  - name: Auth
+    description: Cadastro, login e gestão de sessão
+  - name: Accounts
+    description: Contas financeiras
+  - name: Categories
+    description: Categorias de receitas e despesas
+  - name: Categorization
+    description: Categorização automática (regras + histórico)
+  - name: Transactions
+    description: Lançamentos financeiros
+  - name: Attachments
+    description: Comprovantes (anexos) de lançamentos
+  - name: Contacts
+    description: Clientes e fornecedores
+  - name: Tags
+    description: Etiquetas (rótulos) de lançamentos
+  - name: Search
+    description: Busca global multi-domínio
+  - name: Payables
+    description: Contas a pagar e a receber
+  - name: Dashboard
+    description: Visão consolidada
+  - name: Forecast
+    description: Projeção de fluxo de caixa
+  - name: System
+    description: Saúde do serviço
+  - name: CreditCards
+    description: Cartões de crédito
+  - name: Goals
+    description: Metas de economia
+  - name: Budgets
+    description: Orçamentos mensais por categoria
+  - name: Organization
+    description: Configuração da organização ativa (nome, moeda) e moedas suportadas
+  - name: Members
+    description: Membros e papéis da organização
+  - name: Invitations
+    description: Convites de novos membros
+  - name: Subscription
+    description: Plano e uso da assinatura
+  - name: Notifications
+    description: Alertas in-app
+  - name: Reports
+    description: Exportações
+  - name: Imports
+    description: Importação de extratos bancários (OFX/CSV)
+  - name: Recurrences
+    description: Lançamentos recorrentes (motor de recorrência)
+  - name: Account
+    description: Autogestão da conta (2FA e direitos LGPD)
+  - name: Auditoria
+    description: Trilha de auditoria (ações sensíveis; somente owner/admin)
+  - name: Admin
+    description: >
+      Back-office da plataforma (super-administrador). Endpoints platform-wide,
+      NÃO escopados por tenant: exigem Authorization Bearer de um usuário com
+      super_admin=true e não usam o cabeçalho X-Organization-ID.
+  - name: Leads
+    description: >
+      Captação de leads pelo formulário público "Solicitar acesso" da landing
+      page (POST anônimo) e gestão pelo super-admin (listar, atualizar status/
+      observações, descartar e provisionar a organização a partir do lead).
+
+security:
+  - bearerAuth: []
+    orgHeader: []
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Serviço operante
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          status: { type: string, example: ok }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Cadastra usuário e cria organização
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Conta criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '409':
+          description: E-mail já cadastrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '403':
+          description: Cadastro fechado (registration_closed) — assinatura desativada pelo administrador
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/registration-open:
+    get:
+      tags: [Auth]
+      summary: Indica se o cadastro público está aberto
+      description: >
+        Flag pública para o frontend ocultar a tela de cadastro quando o
+        registro self-service estiver desativado (REGISTRATION_OPEN=false).
+      security: []
+      responses:
+        '200':
+          description: Estado do cadastro público
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          open: { type: boolean }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Autentica e emite tokens
+      description: >
+        Quando o usuário tem 2FA ativado, a resposta NÃO contém tokens: retorna
+        `{ mfa_required: true, mfa_token }`. O cliente deve então chamar
+        `/auth/2fa/verify` com o `mfa_token` e o código TOTP (ou de recuperação).
+        Após 5 tentativas falhas o e-mail é bloqueado por 15 minutos (HTTP 423).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Autenticado, ou desafio de 2FA
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AuthEnvelope'
+                  - allOf:
+                      - $ref: '#/components/schemas/Envelope'
+                      - properties:
+                          data: { $ref: '#/components/schemas/MFAChallenge' }
+        '401':
+          description: Credenciais inválidas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '403':
+          description: Conta desativada pelo administrador (account_disabled)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '423':
+          description: Conta temporariamente bloqueada por excesso de tentativas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/2fa/verify:
+    post:
+      tags: [Auth]
+      summary: Conclui o login com o segundo fator
+      description: Troca o `mfa_token` + código TOTP (ou de recuperação) por uma sessão completa.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TwoFactorVerifyRequest' }
+      responses:
+        '200':
+          description: Autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '401':
+          description: Token ou código inválido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rotaciona o refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: Novo par de tokens
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '401':
+          description: Token inválido ou expirado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoga o refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '204': { description: Sessão encerrada }
+
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Solicita redefinição de senha
+      description: >
+        Sempre retorna 200 com mensagem genérica (não revela se o e-mail existe).
+        Em ambiente de desenvolvimento, o token de redefinição é retornado em
+        `data.reset_token` para facilitar testes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+      responses:
+        '200':
+          description: Solicitação processada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          message: { type: string }
+                          reset_token: { type: string, description: Somente em desenvolvimento }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Redefine a senha usando o token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '200':
+          description: Senha redefinida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '400':
+          description: Token inválido ou expirado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      summary: Confirma o e-mail (verificação suave)
+      description: A verificação NÃO bloqueia o login; apenas marca o e-mail como verificado.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerifyEmailRequest' }
+      responses:
+        '200':
+          description: E-mail verificado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '400':
+          description: Token inválido ou expirado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/verify-email/resend:
+    post:
+      tags: [Auth]
+      summary: Reenvia o link de verificação
+      description: Sempre retorna 200 genérico (não revela existência/estado do e-mail).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResendVerificationRequest' }
+      responses:
+        '200':
+          description: Solicitação processada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /me:
+    get:
+      tags: [Auth]
+      summary: Usuário autenticado e suas organizações
+      responses:
+        '200':
+          description: Dados do usuário
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/MeResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/2fa/setup:
+    post:
+      tags: [Account]
+      summary: Inicia configuração do 2FA (TOTP)
+      description: Gera um segredo TOTP pendente (ainda não ativo) e retorna o otpauth_url para QR code.
+      responses:
+        '200':
+          description: Segredo gerado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/TwoFactorSetup' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/2fa/enable:
+    post:
+      tags: [Account]
+      summary: Ativa o 2FA validando um código TOTP
+      description: Retorna 8 códigos de recuperação de uso único (exibidos apenas uma vez).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TwoFactorCodeRequest' }
+      responses:
+        '200':
+          description: 2FA ativado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/TwoFactorEnable' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /me/2fa/disable:
+    post:
+      tags: [Account]
+      summary: Desativa o 2FA
+      description: Exige um código TOTP atual ou um código de recuperação válido.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TwoFactorCodeRequest' }
+      responses:
+        '200':
+          description: 2FA desativado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /me/export:
+    get:
+      tags: [Account]
+      summary: Exporta todos os dados do usuário (LGPD)
+      description: >
+        Retorna um documento JSON com o perfil, organizações, dados financeiros e
+        logs de auditoria do usuário, como anexo
+        (`Content-Disposition: attachment; filename="finance-sh-meus-dados.json"`).
+      responses:
+        '200':
+          description: Documento JSON com os dados do usuário
+          content:
+            application/json:
+              schema: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/account:
+    delete:
+      tags: [Account]
+      summary: Remove/anonimiza a conta (LGPD — direito ao esquecimento)
+      description: >
+        Exige a senha atual. Soft-deleta os dados financeiros e as organizações
+        das quais o usuário é o único dono, remove vínculos, anonimiza o usuário e
+        revoga todas as sessões.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeleteAccountRequest' }
+      responses:
+        '200':
+          description: Conta removida/anonimizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '401':
+          description: Senha incorreta ou não autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /accounts:
+    get:
+      tags: [Accounts]
+      summary: Lista contas com saldo calculado
+      responses:
+        '200':
+          description: Lista de contas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Account' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Accounts]
+      summary: Cria conta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountRequest' }
+      responses:
+        '201':
+          description: Conta criada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Account' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /accounts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Accounts]
+      summary: Detalha conta
+      responses:
+        '200':
+          description: Conta
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Account' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Accounts]
+      summary: Atualiza conta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountRequest' }
+      responses:
+        '200':
+          description: Conta atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Account' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Accounts]
+      summary: Remove conta
+      responses:
+        '204': { description: Removida }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /categories:
+    get:
+      tags: [Categories]
+      summary: Lista categorias
+      responses:
+        '200':
+          description: Lista de categorias
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Category' }
+    post:
+      tags: [Categories]
+      summary: Cria categoria
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRequest' }
+      responses:
+        '201':
+          description: Categoria criada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Category' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Categories]
+      summary: Detalha categoria
+      responses:
+        '200':
+          description: Categoria
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Category' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Categories]
+      summary: Atualiza categoria
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRequest' }
+      responses:
+        '200':
+          description: Categoria atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Category' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Categories]
+      summary: Remove categoria
+      responses:
+        '204': { description: Removida }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /categorization/rules:
+    get:
+      tags: [Categorization]
+      summary: Lista as regras de categorização automática
+      responses:
+        '200':
+          description: Lista de regras (maior prioridade primeiro)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CategoryRule' }
+    post:
+      tags: [Categorization]
+      summary: Cria uma regra de categorização
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRuleRequest' }
+      responses:
+        '201':
+          description: Regra criada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/CategoryRule' }
+        '422': { description: Regra inválida (categoria inexistente ou regex que não compila) }
+
+  /categorization/rules/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    put:
+      tags: [Categorization]
+      summary: Atualiza uma regra de categorização
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRuleRequest' }
+      responses:
+        '200':
+          description: Regra atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/CategoryRule' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: Regra inválida }
+    delete:
+      tags: [Categorization]
+      summary: Remove uma regra de categorização
+      responses:
+        '204': { description: Removida }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /categorization/apply:
+    post:
+      tags: [Categorization]
+      summary: Aplica as regras às transações sem categoria
+      description: >
+        Percorre as transações da organização sem categoria, resolve uma
+        categoria (regras + histórico) e a atribui. Retorna a quantidade
+        atualizada.
+      responses:
+        '200':
+          description: Quantidade de transações categorizadas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/ApplyResult' }
+
+  /categorization/suggest:
+    get:
+      tags: [Categorization]
+      summary: Sugere uma categoria para uma descrição
+      description: >
+        Resolve uma categoria para a descrição informada: primeiro pelas regras
+        (maior prioridade), depois pelo histórico (categoria mais usada em
+        transações passadas com token significativo). `source` indica a origem.
+      parameters:
+        - { name: description, in: query, required: true, schema: { type: string } }
+        - { name: type, in: query, required: true, schema: { type: string, enum: [income, expense] } }
+      responses:
+        '200':
+          description: Sugestão de categoria
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/SuggestResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /recurrences:
+    get:
+      tags: [Recurrences]
+      summary: Lista as regras de recorrência
+      description: >
+        Lista as regras de lançamentos recorrentes da organização, ordenadas
+        pela próxima data de execução (next_run_date). Disponível a qualquer
+        membro.
+      responses:
+        '200':
+          description: Lista de regras (próxima execução primeiro)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/RecurrenceRule' }
+    post:
+      tags: [Recurrences]
+      summary: Cria uma regra de recorrência
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecurrenceRuleRequest' }
+      responses:
+        '201':
+          description: Regra criada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/RecurrenceRule' }
+        '422': { description: Regra inválida (conta/categoria/contato inexistente, frequência ou intervalo inválidos) }
+
+  /recurrences/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    put:
+      tags: [Recurrences]
+      summary: Atualiza uma regra de recorrência
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecurrenceRuleRequest' }
+      responses:
+        '200':
+          description: Regra atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/RecurrenceRule' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: Regra inválida }
+    delete:
+      tags: [Recurrences]
+      summary: Remove uma regra de recorrência
+      responses:
+        '204': { description: Removida }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /recurrences/{id}/run:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      tags: [Recurrences]
+      summary: Gera agora as ocorrências pendentes de uma regra
+      description: >
+        Materializa imediatamente os lançamentos que a regra deve até a data
+        atual, avançando o cursor (next_run_date). Idempotente. Retorna quantos
+        lançamentos foram criados.
+      responses:
+        '200':
+          description: Quantidade de lançamentos gerados
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/RecurrenceRunResult' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /contacts:
+    get:
+      tags: [Contacts]
+      summary: Lista contatos (clientes/fornecedores)
+      responses:
+        '200':
+          description: Lista de contatos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Contact' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Contacts]
+      summary: Cria contato
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactRequest' }
+      responses:
+        '201':
+          description: Contato criado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Contact' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /contacts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Contacts]
+      summary: Detalha contato
+      responses:
+        '200':
+          description: Contato
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Contact' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Contacts]
+      summary: Atualiza contato
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContactRequest' }
+      responses:
+        '200':
+          description: Contato atualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Contact' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Contacts]
+      summary: Remove contato
+      responses:
+        '204': { description: Removido }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tags:
+    get:
+      tags: [Tags]
+      summary: Lista etiquetas
+      responses:
+        '200':
+          description: Lista de etiquetas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Tag' }
+    post:
+      tags: [Tags]
+      summary: Cria etiqueta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagRequest' }
+      responses:
+        '201':
+          description: Etiqueta criada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Tag' }
+        '409':
+          description: Já existe uma etiqueta com este nome na organização
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /tags/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    put:
+      tags: [Tags]
+      summary: Atualiza etiqueta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagRequest' }
+      responses:
+        '200':
+          description: Etiqueta atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Tag' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Já existe uma etiqueta com este nome na organização
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Tags]
+      summary: Remove etiqueta (limpa também as associações)
+      responses:
+        '204': { description: Removida }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /search:
+    get:
+      tags: [Search]
+      summary: Busca global (org-scoped) em vários domínios
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Termo de busca (ILIKE, case-insensitive). Vazio retorna grupos vazios }
+        - { name: limit, in: query, schema: { type: integer, default: 5, minimum: 1, maximum: 20 }, description: Máximo de itens por grupo }
+      responses:
+        '200':
+          description: Resultados agrupados por domínio
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/SearchResult' }
+
+  /transactions:
+    get:
+      tags: [Transactions]
+      summary: Lista lançamentos (com filtros e paginação)
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [income, expense, transfer] } }
+        - { name: account_id, in: query, schema: { type: string, format: uuid } }
+        - { name: category_id, in: query, schema: { type: string, format: uuid } }
+        - { name: contact_id, in: query, schema: { type: string, format: uuid } }
+        - { name: tag_id, in: query, schema: { type: string, format: uuid }, description: Filtra por etiqueta anexada }
+        - { name: from, in: query, schema: { type: string, format: date }, description: Data inicial (YYYY-MM-DD ou RFC3339) }
+        - { name: to, in: query, schema: { type: string, format: date }, description: Data final (YYYY-MM-DD ou RFC3339) }
+        - { name: search, in: query, schema: { type: string }, description: Busca na descrição }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: Página de lançamentos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Transaction' }
+                      meta: { $ref: '#/components/schemas/PageMeta' }
+    post:
+      tags: [Transactions]
+      summary: Cria lançamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransactionRequest' }
+      responses:
+        '201':
+          description: Lançamento criado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Transaction' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /transactions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Transactions]
+      summary: Detalha lançamento
+      responses:
+        '200':
+          description: Lançamento
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Transaction' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Transactions]
+      summary: Atualiza lançamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransactionRequest' }
+      responses:
+        '200':
+          description: Lançamento atualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Transaction' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Transactions]
+      summary: Remove lançamento
+      description: >
+        Com scope=all, e quando o lançamento pertence a um grupo de parcelas,
+        remove o grupo inteiro; scope=one (padrão) remove apenas este lançamento.
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [one, all], default: one } }
+      responses:
+        '204': { description: Removido }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /transactions/{id}/settle:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      tags: [Transactions]
+      summary: Dá baixa (quita) um lançamento
+      description: >
+        Marca o lançamento como pago, registrando paid_at (padrão agora) e,
+        opcionalmente, movendo-o para outra conta (account_id, validada na org).
+        O corpo é opcional.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SettleRequest' }
+      responses:
+        '200':
+          description: Lançamento quitado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Transaction' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /transactions/{id}/unsettle:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      tags: [Transactions]
+      summary: Estorna a baixa de um lançamento
+      description: Reverte a quitação (paid=false, paid_at=null).
+      responses:
+        '200':
+          description: Baixa estornada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Transaction' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /transactions/{id}/attachments:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Attachments]
+      summary: Lista comprovantes do lançamento
+      responses:
+        '200':
+          description: Lista de comprovantes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Attachment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Attachments]
+      summary: Anexa um comprovante ao lançamento
+      description: >
+        Envia um arquivo (multipart/form-data, campo `file`). Tipos aceitos:
+        image/jpeg, image/png, image/webp, image/gif e application/pdf. Tamanho
+        máximo configurável (ATTACHMENT_MAX_MB, padrão 10MB).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Arquivo do comprovante
+      responses:
+        '201':
+          description: Comprovante anexado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Attachment' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: Arquivo excede o tamanho máximo permitido }
+        '422': { description: Tipo de arquivo não suportado }
+        '503': { description: Armazenamento de arquivos indisponível }
+
+  /attachments/{id}/download:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Attachments]
+      summary: Baixa o conteúdo do comprovante
+      description: >
+        Retorna os bytes do arquivo com Content-Type e
+        Content-Disposition: attachment. Escopo por organização.
+      responses:
+        '200':
+          description: Conteúdo do arquivo
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { description: Armazenamento de arquivos indisponível }
+
+  /attachments/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    delete:
+      tags: [Attachments]
+      summary: Remove um comprovante
+      responses:
+        '204': { description: Removido }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /imports/preview:
+    post:
+      tags: [Imports]
+      summary: Pré-visualiza um extrato (OFX/CSV) sem persistir
+      description: >
+        Recebe um arquivo de extrato (multipart/form-data, campo `file`),
+        analisa-o e retorna os lançamentos detectados com sinalização de
+        duplicidade — nada é gravado. O frontend revisa/edita e envia os
+        lançamentos mantidos para `/imports/commit`. Os campos `delimiter`,
+        `has_header`, `date_col`, `desc_col`, `amount_col`, `date_format` e
+        `decimal_sep` ajustam a leitura de CSV (colunas com índice 0; -1/ausente
+        = autodetecção pelo cabeçalho). Tamanho máximo configurável
+        (ATTACHMENT_MAX_MB, padrão 10MB).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, account_id]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Arquivo do extrato (OFX 1.x/2.x ou CSV)
+                account_id:
+                  type: string
+                  format: uuid
+                  description: Conta de destino
+                format:
+                  type: string
+                  enum: [auto, ofx, csv]
+                  default: auto
+                delimiter:
+                  type: string
+                  description: "Separador CSV (';' ou ','); autodetecta quando ausente"
+                has_header:
+                  type: string
+                  enum: ['true', 'false']
+                  description: "'true' quando a primeira linha do CSV é cabeçalho"
+                date_col: { type: integer, description: Índice 0-based da coluna de data (-1 = autodetecta) }
+                desc_col: { type: integer, description: Índice 0-based da descrição (-1 = autodetecta) }
+                amount_col: { type: integer, description: Índice 0-based do valor (-1 = autodetecta) }
+                date_format: { type: string, description: "Layout Go da data (ex.: 02/01/2006)" }
+                decimal_sep: { type: string, description: "Separador decimal (',' BR ou '.')" }
+      responses:
+        '200':
+          description: Lançamentos detectados
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/ImportPreview' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '413': { description: Arquivo excede o tamanho máximo permitido }
+        '422': { description: Conta inválida, formato não suportado ou arquivo vazio }
+
+  /imports/commit:
+    post:
+      tags: [Imports]
+      summary: Grava os lançamentos revisados de um extrato
+      description: >
+        Persiste os lançamentos selecionados como transações pagas (paid=true)
+        na conta informada, numa única transação de banco. Duplicidades (por
+        `external_id`) são reverificadas e ignoradas. A `category_id` opcional
+        (validada na organização) é aplicada a todos os lançamentos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ImportCommitRequest' }
+      responses:
+        '200':
+          description: Resultado da gravação
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/ImportCommitResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { description: Validação, conta/categoria inválida ou lista vazia }
+
+  /payables:
+    get:
+      tags: [Payables]
+      summary: Contas a pagar (despesas) com resumo
+      description: >
+        Lista despesas filtradas por status de pagamento e janela de vencimento.
+        O envelope `meta` traz a paginação e um objeto `summary` com os totais.
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, overdue, paid, all], default: open } }
+        - { name: from, in: query, schema: { type: string, format: date }, description: Vencimento inicial }
+        - { name: to, in: query, schema: { type: string, format: date }, description: Vencimento final }
+        - { name: contact_id, in: query, schema: { type: string, format: uuid } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: Página de contas a pagar
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Transaction' }
+                      meta: { $ref: '#/components/schemas/PayablesMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /receivables:
+    get:
+      tags: [Payables]
+      summary: Contas a receber (receitas) com resumo
+      description: >
+        Lista receitas filtradas por status de pagamento e janela de vencimento.
+        Mesma forma de `/payables`.
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, overdue, paid, all], default: open } }
+        - { name: from, in: query, schema: { type: string, format: date }, description: Vencimento inicial }
+        - { name: to, in: query, schema: { type: string, format: date }, description: Vencimento final }
+        - { name: contact_id, in: query, schema: { type: string, format: uuid } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: Página de contas a receber
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Transaction' }
+                      meta: { $ref: '#/components/schemas/PayablesMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /cashflow/forecast:
+    get:
+      tags: [Forecast]
+      summary: Projeção de fluxo de caixa
+      description: >
+        Projeta o saldo para os próximos N meses (1..12, padrão 3) a partir do
+        saldo atual, das contas a pagar/receber não quitadas e dos lançamentos
+        recorrentes.
+      parameters:
+        - { name: months, in: query, schema: { type: integer, default: 3, minimum: 1, maximum: 12 } }
+      responses:
+        '200':
+          description: Projeção mensal
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/ForecastResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      summary: Visão consolidada do mês
+      responses:
+        '200':
+          description: Dados do dashboard
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/DashboardResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /credit-cards:
+    get:
+      tags: [CreditCards]
+      summary: Lista cartões com uso/limite disponível
+      responses:
+        '200':
+          description: Lista de cartões
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/CreditCard' }
+    post:
+      tags: [CreditCards]
+      summary: Cria cartão
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditCardRequest' }
+      responses:
+        '201':
+          description: Cartão criado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/CreditCard' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /credit-cards/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [CreditCards]
+      summary: Detalha cartão
+      responses:
+        '200':
+          description: Cartão
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/CreditCard' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [CreditCards]
+      summary: Atualiza cartão
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreditCardRequest' }
+      responses:
+        '200':
+          description: Cartão atualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/CreditCard' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [CreditCards]
+      summary: Remove cartão
+      responses:
+        '204': { description: Removido }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /credit-cards/{id}/invoices:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [CreditCards]
+      summary: Lista as faturas recentes do cartão
+      description: >
+        Agrupa os lançamentos do cartão por referência de fechamento e devolve as
+        faturas mais recentes primeiro. Leitura disponível a qualquer membro.
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 12, minimum: 1 } }
+      responses:
+        '200':
+          description: Lista de faturas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Invoice' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /credit-cards/{id}/invoices/{reference}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - { name: reference, in: path, required: true, schema: { type: string }, description: Ano-mês do fechamento (YYYY-MM) }
+    get:
+      tags: [CreditCards]
+      summary: Detalha uma fatura e seus lançamentos
+      responses:
+        '200':
+          description: Fatura + lançamentos do ciclo
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/InvoiceDetail' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /credit-cards/{id}/invoices/{reference}/pay:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - { name: reference, in: path, required: true, schema: { type: string }, description: Ano-mês do fechamento (YYYY-MM) }
+    post:
+      tags: [CreditCards]
+      summary: Paga a fatura (quita todos os lançamentos do ciclo)
+      description: >
+        Marca todos os lançamentos da fatura como pagos, registra paid_at e move-os
+        para a conta pagadora (account_id), de modo que o saldo do banco reflita o
+        pagamento e o "used" do cartão caia. Requer permissão de escrita.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoicePayRequest' }
+      responses:
+        '200':
+          description: Fatura atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Invoice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /credit-cards/{id}/invoices/{reference}/unpay:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+      - { name: reference, in: path, required: true, schema: { type: string }, description: Ano-mês do fechamento (YYYY-MM) }
+    post:
+      tags: [CreditCards]
+      summary: Estorna o pagamento da fatura
+      description: Reverte a quitação de todos os lançamentos do ciclo (paid=false).
+      responses:
+        '200':
+          description: Fatura atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Invoice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /goals:
+    get:
+      tags: [Goals]
+      summary: Lista metas
+      responses:
+        '200':
+          description: Lista de metas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Goal' }
+    post:
+      tags: [Goals]
+      summary: Cria meta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoalRequest' }
+      responses:
+        '201':
+          description: Meta criada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Goal' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /goals/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    get:
+      tags: [Goals]
+      summary: Detalha meta
+      responses:
+        '200':
+          description: Meta
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Goal' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Goals]
+      summary: Atualiza meta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoalRequest' }
+      responses:
+        '200':
+          description: Meta atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Goal' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Goals]
+      summary: Remove meta
+      responses:
+        '204': { description: Removida }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /budgets:
+    get:
+      tags: [Budgets]
+      summary: Lista orçamentos do mês (com gasto e percentual)
+      parameters:
+        - { name: month, in: query, schema: { type: integer, minimum: 1, maximum: 12 }, description: Mês (padrão atual) }
+        - { name: year, in: query, schema: { type: integer }, description: Ano (padrão atual) }
+      responses:
+        '200':
+          description: Lista de orçamentos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Budget' }
+    post:
+      tags: [Budgets]
+      summary: Cria orçamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BudgetRequest' }
+      responses:
+        '201':
+          description: Orçamento criado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Budget' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /budgets/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    put:
+      tags: [Budgets]
+      summary: Atualiza orçamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BudgetRequest' }
+      responses:
+        '200':
+          description: Orçamento atualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Budget' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Budgets]
+      summary: Remove orçamento
+      responses:
+        '204': { description: Removido }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /members:
+    get:
+      tags: [Members]
+      summary: Lista membros da organização (owner/admin)
+      responses:
+        '200':
+          description: Lista de membros
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Member' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /members/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    put:
+      tags: [Members]
+      summary: Altera o papel de um membro (owner/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateMemberRequest' }
+      responses:
+        '200':
+          description: Papel atualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Member' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Não é possível rebaixar o último proprietário
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+    delete:
+      tags: [Members]
+      summary: Remove um membro (owner/admin)
+      responses:
+        '204': { description: Removido }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Não é possível remover o último proprietário
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+
+  /invitations:
+    get:
+      tags: [Invitations]
+      summary: Lista convites pendentes (owner/admin)
+      responses:
+        '200':
+          description: Convites pendentes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Invitation' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Invitations]
+      summary: Cria convite (owner/admin)
+      description: Respeita o limite de usuários do plano (membros + convites pendentes).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvitationRequest' }
+      responses:
+        '201':
+          description: Convite criado (inclui token)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Invitation' }
+        '402':
+          description: Limite de usuários do plano atingido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /invitations/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    delete:
+      tags: [Invitations]
+      summary: Revoga convite (owner/admin)
+      responses:
+        '204': { description: Revogado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /invitations/accept:
+    post:
+      tags: [Invitations]
+      summary: Aceita um convite (usuário autenticado)
+      description: >
+        Requer autenticação, mas não exige o cabeçalho X-Organization-ID — a
+        organização é resolvida a partir do convite.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcceptInvitationRequest' }
+      responses:
+        '200':
+          description: Membro criado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Member' }
+        '404':
+          description: Convite inválido ou já utilizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '409':
+          description: Usuário já é membro da organização
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+
+  /organization:
+    get:
+      tags: [Organization]
+      summary: Organização ativa (qualquer membro)
+      description: Retorna a organização do X-Organization-ID com o papel do solicitante.
+      responses:
+        '200':
+          description: Organização ativa
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Organization' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Organization]
+      summary: Atualiza nome/moeda da organização ativa (owner/admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrgUpdateRequest' }
+      responses:
+        '200':
+          description: Organização atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Organization' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: Moeda não suportada ou validação inválida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+
+  /currencies:
+    get:
+      tags: [Organization]
+      summary: Moedas suportadas (qualquer membro)
+      description: Tabela estática de moedas ISO-4217 aceitas, com nome em pt-BR e símbolo.
+      responses:
+        '200':
+          description: Lista de moedas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Currency' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /subscription:
+    get:
+      tags: [Subscription]
+      summary: Plano e uso atual
+      responses:
+        '200':
+          description: Assinatura
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Subscription' }
+
+  /subscription/upgrade:
+    post:
+      tags: [Subscription]
+      summary: Altera o plano (owner)
+      description: Sem cobrança real — ponto de integração futura (Stripe/Mercado Pago/Asaas).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpgradeRequest' }
+      responses:
+        '200':
+          description: Plano atualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Subscription' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Lista notificações (mais recentes primeiro)
+      responses:
+        '200':
+          description: Lista de notificações
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Notification' }
+
+  /notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: Marca todas como lidas
+      responses:
+        '204': { description: Concluído }
+
+  /notifications/{id}/read:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    post:
+      tags: [Notifications]
+      summary: Marca uma notificação como lida
+      responses:
+        '204': { description: Concluído }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /reports/transactions.csv:
+    get:
+      tags: [Reports]
+      summary: Exporta lançamentos em CSV
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: type, in: query, schema: { type: string, enum: [income, expense, transfer] } }
+      responses:
+        '200':
+          description: Arquivo CSV
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+
+  /reports/summary:
+    get:
+      tags: [Reports]
+      summary: Dados agregados para a página de Relatórios
+      description: >
+        Retorna totais de receitas/despesas do período mais quebras por
+        categoria e por mês. Sem `from`/`to` usa o mês corrente.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Resumo agregado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/ReportSummary' }
+
+  /reports/statement.pdf:
+    get:
+      tags: [Reports]
+      summary: Extrato em PDF (estilo bancário)
+      description: >
+        PDF com cabeçalho (finance.sh + organização + período), tabela de lançamentos
+        no intervalo e totais (receitas, despesas, saldo). Sem `from`/`to` usa o
+        mês corrente.
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Arquivo PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  /reports/monthly.pdf:
+    get:
+      tags: [Reports]
+      summary: Resumo mensal em PDF
+      description: >
+        PDF com receitas x despesas do mês, maiores categorias de despesa e as
+        listas de contas pagas e a vencer. Sem `month`/`year` usa o mês corrente.
+      parameters:
+        - { name: month, in: query, schema: { type: integer, minimum: 1, maximum: 12 } }
+        - { name: year, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Arquivo PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  /export/data.xlsx:
+    get:
+      tags: [Reports]
+      summary: Exporta os dados da organização em planilha (.xlsx)
+      description: >
+        Planilha com abas Transações, Contas, Categorias, Contatos, ContasAPagar
+        e ContasAReceber. Valores em reais. Escopo da organização ativa.
+      responses:
+        '200':
+          description: Arquivo XLSX
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+
+  /transactions/bulk-settle:
+    post:
+      tags: [Transactions]
+      summary: Baixa em lote (marca vários lançamentos como pagos)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkSettleRequest' }
+      responses:
+        '200':
+          description: Quantidade atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/BulkResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /transactions/bulk-unsettle:
+    post:
+      tags: [Transactions]
+      summary: Estorna baixa em lote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkIDsRequest' }
+      responses:
+        '200':
+          description: Quantidade atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/BulkResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /transactions/bulk-categorize:
+    post:
+      tags: [Transactions]
+      summary: Aplica uma categoria a vários lançamentos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkCategorizeRequest' }
+      responses:
+        '200':
+          description: Quantidade atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/BulkResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /transactions/bulk-delete:
+    post:
+      tags: [Transactions]
+      summary: Remove vários lançamentos (soft delete)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkIDsRequest' }
+      responses:
+        '200':
+          description: Quantidade removida
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/BulkResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /me/change-password:
+    post:
+      tags: [Account]
+      summary: Altera a própria senha (re-autenticação via senha atual)
+      description: >
+        Exige a senha atual em `current_password`. Em sucesso, atualiza a senha,
+        limpa `must_change_password` e revoga todas as sessões do usuário; para
+        preservar a sessão atual, envie o refresh token bruto em
+        `keep_refresh_token` (quando ausente TODAS as sessões são revogadas e o
+        cliente deve refazer o login). Usado tanto no fluxo de troca obrigatória
+        após provisionamento quanto em rotações normais de senha.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '200':
+          description: Senha alterada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '401':
+          description: Senha atual incorreta ou não autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /me/sessions:
+    get:
+      tags: [Account]
+      summary: Lista as sessões ativas do usuário
+      description: >
+        Sessões derivadas dos refresh tokens não revogados e não expirados. O
+        hash do token nunca é exposto.
+      responses:
+        '200':
+          description: Sessões ativas
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/sessions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdParam'
+    delete:
+      tags: [Account]
+      summary: Revoga uma sessão do usuário
+      responses:
+        '200': { description: Sessão revogada }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/sessions/revoke-others:
+    post:
+      tags: [Account]
+      summary: Revoga as demais sessões do usuário
+      description: >
+        Revoga todas as sessões ativas. Para preservar a sessão atual, envie o
+        refresh token bruto em `keep_refresh_token`; quando omitido, TODAS as
+        sessões são revogadas e o cliente deve refazer o login.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RevokeOtherSessionsRequest' }
+      responses:
+        '200':
+          description: Quantidade revogada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/BulkResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /audit-logs:
+    get:
+      tags: [Auditoria]
+      summary: Lista a trilha de auditoria (owner/admin)
+      description: >
+        Retorna os registros de auditoria da organização (ações sensíveis
+        gravadas pelo middleware de auditoria), do mais recente ao mais antigo.
+        Acesso restrito a owner/admin.
+      parameters:
+        - { name: action, in: query, schema: { type: string, enum: [POST, PUT, PATCH, DELETE] }, description: Método HTTP da ação (correspondência exata) }
+        - { name: entity, in: query, schema: { type: string }, description: "Recurso afetado (primeiro segmento do path, ex.: accounts) — correspondência exata" }
+        - { name: user_id, in: query, schema: { type: string, format: uuid }, description: Filtra pelo autor da ação }
+        - { name: from, in: query, schema: { type: string, format: date }, description: Data inicial (YYYY-MM-DD ou RFC3339) sobre created_at }
+        - { name: to, in: query, schema: { type: string, format: date }, description: Data final (YYYY-MM-DD ou RFC3339) sobre created_at }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: Página de registros de auditoria
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AuditLog' }
+                      meta: { $ref: '#/components/schemas/PageMeta' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/stats:
+    get:
+      tags: [Admin]
+      summary: Contadores globais da plataforma (super-admin)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Estatísticas globais
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AdminStats' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/organizations:
+    get:
+      tags: [Admin]
+      summary: Lista organizações (super-admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: search, in: query, schema: { type: string }, description: Busca por nome/slug (ILIKE) }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: Página de organizações
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AdminOrg' }
+                      meta: { $ref: '#/components/schemas/PageMeta' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin]
+      summary: Provisiona uma nova organização + proprietário (super-admin)
+      description: >
+        O super-admin digita a senha inicial (`initial_password`) no momento da
+        criação. O serviço cria o usuário proprietário com essa senha hashada,
+        `must_change_password=true` (o usuário precisa trocar no primeiro login)
+        e `email_verified=true` (admin já validou o e-mail fora da plataforma),
+        cria a organização, a associação de proprietário e uma assinatura, e
+        semeia categorias/contas padrão. O operador define a senha inicial (o
+        usuário troca no primeiro login). Ignora o gate de cadastro fechado.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminProvisionRequest' }
+      responses:
+        '201':
+          description: Organização provisionada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AdminProvisionResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: E-mail do proprietário já cadastrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/organizations/{id}/suspend:
+    post:
+      tags: [Admin]
+      summary: Suspende uma organização (super-admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200': { description: Organização suspensa }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/organizations/{id}/unsuspend:
+    post:
+      tags: [Admin]
+      summary: Reativa uma organização (super-admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200': { description: Organização reativada }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/organizations/{id}/plan:
+    put:
+      tags: [Admin]
+      summary: Altera o plano da assinatura de uma organização (super-admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminPlanRequest' }
+      responses:
+        '200':
+          description: Assinatura atualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Subscription' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Lista usuários (super-admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: search, in: query, schema: { type: string }, description: Busca por nome/e-mail (ILIKE) }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: Página de usuários
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AdminUser' }
+                      meta: { $ref: '#/components/schemas/PageMeta' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/users/{id}/disable:
+    post:
+      tags: [Admin]
+      summary: Desativa um usuário (super-admin)
+      description: >
+        Bloqueia o login e revoga as sessões (refresh tokens) do usuário. Um
+        super-admin não pode desativar a si mesmo nem o último super-admin.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200': { description: Usuário desativado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Conflito (cannot_disable_self ou last_super_admin)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+
+  /admin/users/{id}/enable:
+    post:
+      tags: [Admin]
+      summary: Reativa um usuário (super-admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '200': { description: Usuário reativado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/users/{id}/organizations:
+    post:
+      tags: [Admin]
+      summary: Provisiona organização adicional para um usuário existente (super-admin)
+      description: >
+        Cria uma organização adicional cujo proprietário é o usuário informado
+        pelo path `id`. Não exige senha — o usuário já possui uma. Cria a
+        organização (slug + sufixo), a associação de proprietário e uma
+        assinatura (mesmos limites de Provision: free 1 usuário / 500 tx;
+        premium 10 usuários / 100000 tx). Faz seed das categorias/contas
+        padrão.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminProvisionForUserRequest' }
+      responses:
+        '201':
+          description: Organização provisionada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AdminProvisionResponse' }
+        '403':
+          description: Conta desativada (account_disabled) ou sem permissão
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/organizations/{id}/members:
+    post:
+      tags: [Admin]
+      summary: Vincula um usuário existente a uma organização (super-admin)
+      description: >
+        Adiciona um membro a uma organização existente diretamente, sem o
+        fluxo de convite/aceite. Respeita o limite de usuários do plano
+        (`max_users`) da assinatura da organização (402 quando excedido).
+        Recusa quando a organização está suspensa (409) ou quando o usuário
+        está desativado (403).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminAddMemberRequest' }
+      responses:
+        '201':
+          description: Membro adicionado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AdminAddMemberResponse' }
+        '402':
+          description: Limite de usuários do plano atingido (user_limit)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '403':
+          description: Conta desativada (account_disabled) ou sem permissão
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Organização suspensa (org_suspended) ou usuário já é membro (already_member)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /leads:
+    post:
+      tags: [Leads]
+      summary: Captura pública de lead (formulário "Solicitar acesso")
+      description: >
+        Endpoint público, anônimo. A landing page envia o lead pelo formulário
+        "Solicitar acesso". Defesas:
+
+        - Honeypot: campos opcionais `hp` e `website` (esconder via CSS). Se
+          qualquer um vier preenchido, o servidor responde 201 sem persistir.
+
+        - Dedupe por e-mail: se já existe um lead com o mesmo `email` e
+          `status=new` criado na última hora, o endpoint NÃO cria um novo
+          (retorna 201 com a mesma mensagem). O formulário sempre tem sucesso
+          para o usuário.
+
+        - Rate limit global por IP (middleware) cobre flood/spam.
+
+        IP (r.RemoteAddr) e User-Agent são capturados e armazenados para
+        triagem interna; nunca são ecoados de volta nesta resposta pública.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeadRequest' }
+      responses:
+        '201':
+          description: Lead recebido (ou silenciosamente aceito por honeypot/dedupe)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/LeadAck' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /admin/leads:
+    get:
+      tags: [Admin, Leads]
+      summary: Lista leads capturados (super-admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [new, contacted, converted, discarded] } }
+        - { name: search, in: query, schema: { type: string }, description: Busca por nome/e-mail/organization_name (ILIKE) }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: Página de leads ordenada por created_at desc
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Lead' }
+                      meta: { $ref: '#/components/schemas/PageMeta' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/leads/{id}:
+    patch:
+      tags: [Admin, Leads]
+      summary: Atualiza status/observações do lead (super-admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeadUpdateRequest' }
+      responses:
+        '200':
+          description: Lead atualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Lead' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Admin, Leads]
+      summary: Remove (soft-delete) um lead (super-admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      responses:
+        '204': { description: Lead removido }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /admin/leads/{id}/provision:
+    post:
+      tags: [Admin, Leads]
+      summary: Provisiona uma organização a partir do lead (super-admin)
+      description: >
+        Atalho de provisionamento: reaproveita o fluxo de
+        `POST /admin/organizations` usando o e-mail do lead como `owner_email`.
+        Quando `organization_name` é omitido, cai para
+        `lead.organization_name || lead.name`; `owner_name` cai para `lead.name`.
+        No sucesso, o lead é marcado como `status=converted` e
+        `converted_org_id` aponta para a nova organização.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminLeadProvisionRequest' }
+      responses:
+        '201':
+          description: Organização provisionada a partir do lead
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AdminLeadProvisionResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Lead já convertido (lead_already_converted) ou e-mail já cadastrado (email_taken)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    orgHeader:
+      type: apiKey
+      in: header
+      name: X-Organization-ID
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Envelope' }
+    Unauthorized:
+      description: Token ausente ou inválido
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Envelope' }
+    NotFound:
+      description: Registro não encontrado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Envelope' }
+    Forbidden:
+      description: Permissão insuficiente
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Envelope' }
+    ValidationError:
+      description: Dados inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Envelope' }
+
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        success: { type: boolean }
+        data: {}
+        error: { $ref: '#/components/schemas/ErrorBody' }
+        meta: {}
+    ErrorBody:
+      type: object
+      nullable: true
+      properties:
+        code: { type: string }
+        message: { type: string }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+
+    ImportPreview:
+      type: object
+      properties:
+        format: { type: string, enum: [ofx, csv] }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/ImportRow' }
+        summary: { $ref: '#/components/schemas/ImportSummary' }
+    ImportRow:
+      type: object
+      properties:
+        index: { type: integer, description: Posição 0-based na lista }
+        date: { type: string, format: date-time }
+        description: { type: string }
+        amount: { type: integer, format: int64, description: Valor em centavos (positivo) }
+        type: { type: string, enum: [income, expense] }
+        external_id: { type: string, description: FITID (OFX) ou hash (CSV) }
+        duplicate: { type: boolean }
+        reason: { type: string, description: Motivo quando duplicate=true }
+        suggested_category_id: { type: string, format: uuid, description: "Categoria sugerida pela categorização automática (regra/histórico); vazio quando nada combinou" }
+    ImportSummary:
+      type: object
+      properties:
+        total: { type: integer }
+        new: { type: integer }
+        duplicates: { type: integer }
+    ImportCommitRequest:
+      type: object
+      required: [account_id, rows]
+      properties:
+        account_id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid, description: Categoria opcional aplicada a todos }
+        rows:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/ImportCommitRow' }
+    ImportCommitRow:
+      type: object
+      required: [date, description, amount, type]
+      properties:
+        date: { type: string, format: date-time }
+        description: { type: string, maxLength: 200 }
+        amount: { type: integer, format: int64, description: Valor em centavos (positivo) }
+        type: { type: string, enum: [income, expense] }
+        external_id: { type: string, maxLength: 120 }
+    ImportCommitResult:
+      type: object
+      properties:
+        created: { type: integer }
+        skipped: { type: integer }
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password, organization_name, accepted_terms]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 72 }
+        organization_name: { type: string, minLength: 2, maxLength: 120 }
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: >
+            Moeda da organização (ISO-4217). Opcional; padrão BRL. Deve ser um
+            código suportado (ver GET /currencies) — caso contrário 422.
+          example: BRL
+        accepted_terms:
+          type: boolean
+          description: LGPD — deve ser true para aceitar os termos de uso.
+          enum: [true]
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string }
+
+    MFAChallenge:
+      type: object
+      properties:
+        mfa_required: { type: boolean, example: true }
+        mfa_token: { type: string, description: Token de curta duração (5 min) para concluir o login em /auth/2fa/verify }
+    TwoFactorVerifyRequest:
+      type: object
+      required: [mfa_token, code]
+      properties:
+        mfa_token: { type: string }
+        code: { type: string, description: Código TOTP de 6 dígitos ou código de recuperação }
+    VerifyEmailRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+    ResendVerificationRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    TwoFactorCodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, description: Código TOTP de 6 dígitos (ou de recuperação ao desativar) }
+    TwoFactorSetup:
+      type: object
+      properties:
+        secret: { type: string }
+        otpauth_url: { type: string, description: URL otpauth:// para renderizar o QR code }
+    TwoFactorEnable:
+      type: object
+      properties:
+        recovery_codes:
+          type: array
+          items: { type: string }
+          description: Códigos de recuperação de uso único (exibidos apenas uma vez)
+    DeleteAccountRequest:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string }
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string, description: "Senha atual (re-autenticação)" }
+        new_password: { type: string, minLength: 8, maxLength: 72 }
+        keep_refresh_token:
+          type: string
+          description: >
+            Refresh token bruto da sessão atual a ser preservada na revogação em
+            massa. Quando ausente todas as sessões são revogadas.
+
+    AuthEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - properties:
+            data: { $ref: '#/components/schemas/AuthResponse' }
+    AuthResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, format: int64, description: Validade do access token em segundos }
+        user: { $ref: '#/components/schemas/User' }
+        organization: { $ref: '#/components/schemas/Organization' }
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        email_verified: { type: boolean }
+        two_factor_enabled: { type: boolean }
+        avatar_url: { type: string }
+        super_admin: { type: boolean, description: "Indica se o usuário é super-administrador da plataforma (acesso ao back-office /admin). Papel de plataforma, distinto do RBAC por organização." }
+        must_change_password: { type: boolean, description: "Quando true, o usuário foi provisionado pelo super-admin com uma senha inicial e precisa trocá-la no primeiro login (frontend força a UI de troca via POST /me/change-password)." }
+    Organization:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        currency: { type: string }
+        role: { type: string, enum: [owner, admin, member, viewer] }
+    MeResponse:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        organizations:
+          type: array
+          items: { $ref: '#/components/schemas/Organization' }
+
+    AdminStats:
+      type: object
+      properties:
+        organizations: { type: integer, format: int64 }
+        users: { type: integer, format: int64 }
+        transactions: { type: integer, format: int64 }
+        active_subscriptions: { type: integer, format: int64 }
+        suspended_orgs: { type: integer, format: int64 }
+    AdminOrgOwner:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+    AdminOrg:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        plan: { type: string, enum: [free, premium] }
+        currency: { type: string }
+        suspended: { type: boolean }
+        owner: { $ref: '#/components/schemas/AdminOrgOwner' }
+        members: { type: integer, format: int64 }
+        transactions: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+    AdminProvisionRequest:
+      type: object
+      required: [organization_name, owner_name, owner_email, initial_password]
+      properties:
+        organization_name: { type: string, minLength: 2, maxLength: 120 }
+        owner_name: { type: string, minLength: 2, maxLength: 120 }
+        owner_email: { type: string, format: email }
+        initial_password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: "Senha inicial digitada pelo super-admin. O usuário provisionado deve trocá-la no primeiro login (must_change_password=true)."
+        plan: { type: string, enum: [free, premium], description: Opcional; padrão free }
+        currency: { type: string, minLength: 3, maxLength: 3, description: "Opcional; padrão BRL (ISO-4217 suportado)" }
+    AdminProvisionResponse:
+      type: object
+      properties:
+        organization: { $ref: '#/components/schemas/AdminOrg' }
+    AdminPlanRequest:
+      type: object
+      required: [plan]
+      properties:
+        plan: { type: string, enum: [free, premium] }
+    AdminUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        super_admin: { type: boolean }
+        disabled: { type: boolean }
+        email_verified: { type: boolean }
+        created_at: { type: string, format: date-time }
+        organizations:
+          type: array
+          items: { type: string }
+          description: Nomes das organizações das quais o usuário é membro
+    AdminProvisionForUserRequest:
+      type: object
+      required: [organization_name]
+      description: >
+        Cria uma organização adicional para um usuário existente (sem senha).
+        Plan/Currency são opcionais (padrão free/BRL).
+      properties:
+        organization_name: { type: string, minLength: 2, maxLength: 120 }
+        plan: { type: string, enum: [free, premium], description: Opcional; padrão free }
+        currency: { type: string, minLength: 3, maxLength: 3, description: "Opcional; padrão BRL (ISO-4217 suportado)" }
+    AdminAddMemberRequest:
+      type: object
+      required: [user_id, role]
+      properties:
+        user_id: { type: string, format: uuid }
+        role: { type: string, enum: [owner, admin, member, viewer] }
+    AdminMembership:
+      type: object
+      properties:
+        id: { type: string, format: uuid, description: ID da associação (membership) }
+        user:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            email: { type: string }
+        role: { type: string, enum: [owner, admin, member, viewer] }
+    AdminAddMemberResponse:
+      type: object
+      properties:
+        membership: { $ref: '#/components/schemas/AdminMembership' }
+
+    LeadRequest:
+      type: object
+      required: [name, email, profile_type]
+      description: >
+        Payload do formulário público "Solicitar acesso". `hp` e `website`
+        são honeypots (devem permanecer vazios — preenchimento aciona
+        aceite-silencioso sem persistência).
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        email: { type: string, format: email }
+        phone: { type: string, maxLength: 30 }
+        organization_name:
+          type: string
+          maxLength: 120
+          description: Nome da PJ/MEI quando o prospecto já tem em mente
+        profile_type:
+          type: string
+          enum: [pessoa, mei, empresa]
+        message: { type: string, maxLength: 1000 }
+        hp: { type: string, description: "Honeypot — não preencher." }
+        website: { type: string, description: "Honeypot — não preencher." }
+    LeadAck:
+      type: object
+      description: Resposta pública mínima do POST /leads (não ecoa o lead).
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+    Lead:
+      type: object
+      description: Lead capturado, na visão do super-admin.
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        organization_name: { type: string }
+        profile_type: { type: string, enum: [pessoa, mei, empresa] }
+        message: { type: string }
+        status: { type: string, enum: [new, contacted, converted, discarded] }
+        notes: { type: string, description: Observações privadas do super-admin }
+        converted_org_id:
+          type: string
+          format: uuid
+          description: Definido quando o lead foi convertido em organização via /admin/leads/{id}/provision
+        ip: { type: string }
+        user_agent: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    LeadUpdateRequest:
+      type: object
+      description: >
+        Atualiza status e/ou notes do lead. Ambos opcionais; ausência mantém o
+        valor atual. `notes` é nullable para permitir limpeza explícita ("").
+      properties:
+        status: { type: string, enum: [new, contacted, converted, discarded] }
+        notes: { type: string, maxLength: 2000, nullable: true }
+    AdminLeadProvisionRequest:
+      type: object
+      required: [initial_password]
+      description: >
+        Provisiona uma organização a partir de um lead. `organization_name` e
+        `owner_name` são opcionais (caem para os campos do lead quando
+        omitidos). `owner_email` NÃO é aceito — sempre vem do lead.
+      properties:
+        organization_name: { type: string, minLength: 2, maxLength: 120 }
+        owner_name: { type: string, minLength: 2, maxLength: 120 }
+        initial_password:
+          type: string
+          minLength: 8
+          maxLength: 72
+          description: Senha inicial; o usuário será obrigado a trocá-la no primeiro login.
+        plan: { type: string, enum: [free, premium], description: Opcional; padrão free }
+        currency: { type: string, minLength: 3, maxLength: 3, description: "Opcional; padrão BRL (ISO-4217 suportado)" }
+    AdminLeadProvisionResponse:
+      type: object
+      properties:
+        organization: { $ref: '#/components/schemas/AdminOrg' }
+        lead: { $ref: '#/components/schemas/Lead' }
+
+    OrgUpdateRequest:
+      type: object
+      description: >
+        Atualiza a organização ativa. Ambos os campos são opcionais; valor
+        ausente/vazio mantém o atual. currency deve ser um código suportado.
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: Moeda (ISO-4217) suportada. 422 quando não suportada.
+          example: USD
+    Currency:
+      type: object
+      properties:
+        code: { type: string, description: Código ISO-4217, example: BRL }
+        name: { type: string, description: Nome em pt-BR, example: Real brasileiro }
+        symbol: { type: string, example: R$ }
+
+    AccountRequest:
+      type: object
+      required: [name, type]
+      properties:
+        name: { type: string, maxLength: 120 }
+        type: { type: string, enum: [bank, wallet, investment, credit_card] }
+        initial_balance: { type: integer, format: int64, description: Saldo inicial em centavos }
+        color: { type: string }
+        icon: { type: string }
+    Account:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string }
+        initial_balance: { type: integer, format: int64 }
+        balance: { type: integer, format: int64, description: Saldo atual calculado em centavos }
+        color: { type: string }
+        icon: { type: string }
+        archived: { type: boolean }
+
+    CategoryRequest:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string, maxLength: 120 }
+        kind: { type: string, enum: [income, expense] }
+        color: { type: string }
+        icon: { type: string }
+    Category:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string }
+        color: { type: string }
+        icon: { type: string }
+
+    CategoryRuleRequest:
+      type: object
+      required: [pattern, category_id]
+      properties:
+        pattern: { type: string, maxLength: 200, description: Palavra-chave/expressão comparada (case-insensitive) com a descrição }
+        category_id: { type: string, format: uuid, description: Categoria a atribuir (deve ser da organização) }
+        match_type: { type: string, enum: [contains, prefix, regex], default: contains }
+        priority: { type: integer, default: 0, description: Maior vence quando várias regras combinam }
+        active: { type: boolean, default: true }
+    CategoryRule:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        pattern: { type: string }
+        match_type: { type: string, enum: [contains, prefix, regex] }
+        category_id: { type: string, format: uuid }
+        category: { $ref: '#/components/schemas/Category' }
+        priority: { type: integer }
+        active: { type: boolean }
+    SuggestResponse:
+      type: object
+      properties:
+        category_id: { type: string, format: uuid, description: Presente quando há sugestão }
+        source: { type: string, enum: [rule, history, none] }
+        category: { $ref: '#/components/schemas/Category' }
+    ApplyResult:
+      type: object
+      properties:
+        updated: { type: integer, description: Transações categorizadas }
+
+    RecurrenceRuleRequest:
+      type: object
+      required: [type, amount, description, account_id, frequency, start_date]
+      properties:
+        type: { type: string, enum: [income, expense] }
+        amount: { type: integer, format: int64, description: Valor em centavos (positivo) }
+        description: { type: string, maxLength: 200 }
+        account_id: { type: string, format: uuid, description: Conta do lançamento (deve ser da organização) }
+        category_id: { type: string, format: uuid, description: Categoria opcional (da organização) }
+        contact_id: { type: string, format: uuid, description: Contato opcional (cliente/fornecedor da organização) }
+        paid: { type: boolean, default: false, description: Estado pago aplicado a cada lançamento gerado }
+        frequency: { type: string, enum: [daily, weekly, monthly, yearly] }
+        interval: { type: integer, minimum: 1, default: 1, description: A cada N períodos }
+        start_date: { type: string, format: date-time, description: Início (também a primeira next_run_date) }
+        end_date: { type: string, format: date-time, description: Fim opcional; após ela a regra é desativada }
+        max_occurrences: { type: integer, minimum: 0, default: 0, description: 0 = ilimitado }
+        active: { type: boolean, default: true }
+    RecurrenceRule:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [income, expense] }
+        amount: { type: integer, format: int64 }
+        description: { type: string }
+        account_id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+        contact_id: { type: string, format: uuid }
+        paid: { type: boolean }
+        frequency: { type: string, enum: [daily, weekly, monthly, yearly] }
+        interval: { type: integer }
+        start_date: { type: string, format: date-time }
+        end_date: { type: string, format: date-time }
+        max_occurrences: { type: integer, description: 0 = ilimitado }
+        occurrences_count: { type: integer, description: Geradas até agora }
+        next_run_date: { type: string, format: date-time }
+        active: { type: boolean }
+        account:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+    RecurrenceRunResult:
+      type: object
+      properties:
+        created: { type: integer, description: Lançamentos gerados }
+
+    ContactRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 120 }
+        type: { type: string, enum: [customer, supplier, both], default: both }
+        document: { type: string, maxLength: 20, description: CPF ou CNPJ }
+        email: { type: string, format: email }
+        phone: { type: string, maxLength: 30 }
+        notes: { type: string, maxLength: 500 }
+    Contact:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string, enum: [customer, supplier, both] }
+        document: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        notes: { type: string }
+
+    TagRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 60 }
+        color: { type: string, maxLength: 9, description: "Cor hex (padrão #6b7280)" }
+    Tag:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: string }
+
+    TransactionRequest:
+      type: object
+      required: [account_id, type, amount, description, date]
+      properties:
+        account_id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+        transfer_account_id: { type: string, format: uuid }
+        contact_id: { type: string, format: uuid, description: Cliente/fornecedor associado }
+        type: { type: string, enum: [income, expense, transfer] }
+        amount: { type: integer, format: int64, description: Valor em centavos (> 0) }
+        description: { type: string, maxLength: 200 }
+        date: { type: string, format: date-time, description: Competência }
+        due_date: { type: string, format: date-time, nullable: true, description: Vencimento (opcional) }
+        paid: { type: boolean }
+        notes: { type: string, maxLength: 500 }
+        installments: { type: integer, minimum: 1, maximum: 420, description: "Parcelamento: ausente/1 = lançamento único; >1 gera N parcelas (uma por mês)" }
+        tag_ids:
+          type: array
+          description: "IDs de etiquetas da organização a anexar. IDs estrangeiros são ignorados; lista vazia/ausente limpa as etiquetas na atualização"
+          items: { type: string, format: uuid }
+    SettleRequest:
+      type: object
+      properties:
+        account_id: { type: string, format: uuid, description: Conta de liquidação (opcional) }
+        paid_at: { type: string, format: date-time, nullable: true, description: Data da baixa (padrão agora) }
+    Transaction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        account_id: { type: string, format: uuid }
+        credit_card_id: { type: string, format: uuid }
+        contact_id: { type: string, format: uuid }
+        type: { type: string }
+        amount: { type: integer, format: int64 }
+        description: { type: string }
+        date: { type: string, format: date-time }
+        due_date: { type: string, format: date-time, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        paid: { type: boolean }
+        recurring: { type: boolean }
+        status: { type: string, enum: [open, overdue, paid], description: Status derivado (não persistido) }
+        installment_group_id: { type: string, format: uuid, description: ID do grupo de parcelas (omitido quando não parcelado) }
+        installment_number: { type: integer, description: Posição da parcela (1-based); omitido quando não parcelado }
+        installment_total: { type: integer, description: Total de parcelas do grupo; omitido quando não parcelado }
+        notes: { type: string }
+        attachment_count: { type: integer, description: "Quantidade de comprovantes anexados (0 quando nenhum)" }
+        category: { $ref: '#/components/schemas/Category' }
+        contact:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        tags:
+          type: array
+          description: Etiquetas anexadas (omitido quando nenhuma)
+          items: { $ref: '#/components/schemas/Tag' }
+
+    Attachment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transaction_id: { type: string, format: uuid }
+        file_name: { type: string }
+        content_type: { type: string }
+        size: { type: integer, format: int64, description: Tamanho em bytes }
+        created_at: { type: string, format: date-time }
+
+    PageMeta:
+      type: object
+      properties:
+        page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer, format: int64 }
+        pages: { type: integer }
+
+    UserMini:
+      type: object
+      nullable: true
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        action: { type: string, description: "Método HTTP da ação (POST/PUT/PATCH/DELETE)" }
+        entity: { type: string, description: "Recurso afetado (primeiro segmento do path)" }
+        entity_id: { type: string, description: "ID do recurso afetado (quando presente na URL)" }
+        ip: { type: string, description: Endereço IP de origem }
+        user: { $ref: '#/components/schemas/UserMini' }
+        metadata: { type: string, description: "Metadados adicionais (JSON serializado)" }
+
+    PayablesSummary:
+      type: object
+      properties:
+        total_open: { type: integer, format: int64, description: Total em aberto (centavos) }
+        total_overdue: { type: integer, format: int64, description: Total vencido (centavos) }
+        due_next_7d: { type: integer, format: int64, description: A vencer nos próximos 7 dias (centavos) }
+        count_open: { type: integer, format: int64, description: Quantidade em aberto }
+    PayablesMeta:
+      type: object
+      properties:
+        page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer, format: int64 }
+        pages: { type: integer }
+        summary: { $ref: '#/components/schemas/PayablesSummary' }
+
+    ForecastResponse:
+      type: object
+      properties:
+        current_balance: { type: integer, format: int64, description: Saldo atual (centavos) }
+        months:
+          type: array
+          items: { $ref: '#/components/schemas/ForecastMonth' }
+        end_balance: { type: integer, format: int64 }
+        lowest: { $ref: '#/components/schemas/ForecastLowest' }
+        alerts:
+          type: array
+          items: { $ref: '#/components/schemas/ForecastAlert' }
+    ForecastMonth:
+      type: object
+      properties:
+        month: { type: string, example: "2026-06" }
+        inflow: { type: integer, format: int64 }
+        outflow: { type: integer, format: int64 }
+        net: { type: integer, format: int64 }
+        projected_balance: { type: integer, format: int64 }
+    ForecastLowest:
+      type: object
+      properties:
+        month: { type: string, example: "2026-06" }
+        balance: { type: integer, format: int64 }
+    ForecastAlert:
+      type: object
+      properties:
+        month: { type: string, example: "2026-06" }
+        message: { type: string, example: "Saldo projetado negativo em junho/2026" }
+
+    DashboardResponse:
+      type: object
+      properties:
+        balance: { type: integer, format: int64 }
+        month_income: { type: integer, format: int64 }
+        month_expense: { type: integer, format: int64 }
+        month_net: { type: integer, format: int64 }
+        upcoming_bills:
+          type: array
+          items: { $ref: '#/components/schemas/Transaction' }
+        cash_flow:
+          type: array
+          items: { $ref: '#/components/schemas/CashFlowPoint' }
+        top_categories:
+          type: array
+          items: { $ref: '#/components/schemas/CategorySpend' }
+        accounts_summary:
+          type: array
+          items: { $ref: '#/components/schemas/Account' }
+    CashFlowPoint:
+      type: object
+      properties:
+        month: { type: string, example: "2026-05" }
+        income: { type: integer, format: int64 }
+        expense: { type: integer, format: int64 }
+    CategorySpend:
+      type: object
+      properties:
+        category_id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: string }
+        total: { type: integer, format: int64 }
+
+    CreditCardRequest:
+      type: object
+      required: [name, closing_day, due_day]
+      properties:
+        name: { type: string, maxLength: 120 }
+        limit: { type: integer, format: int64, description: Limite em centavos }
+        closing_day: { type: integer, minimum: 1, maximum: 28 }
+        due_day: { type: integer, minimum: 1, maximum: 28 }
+        color: { type: string }
+    CreditCard:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        limit: { type: integer, format: int64 }
+        closing_day: { type: integer }
+        due_day: { type: integer }
+        color: { type: string }
+        used: { type: integer, format: int64, description: Soma das despesas não pagas do cartão (centavos) }
+        available: { type: integer, format: int64, description: limit - used }
+
+    Invoice:
+      type: object
+      description: >
+        Fatura (ciclo de faturamento) de um cartão, calculada agrupando os
+        lançamentos do cartão por referência de fechamento. Não é persistida.
+      properties:
+        reference: { type: string, example: "2026-05", description: Ano-mês do fechamento (YYYY-MM) }
+        period_start: { type: string, format: date-time, description: Dia seguinte ao fechamento anterior }
+        period_end: { type: string, format: date-time, description: Data de fechamento }
+        due_date: { type: string, format: date-time, description: Vencimento da fatura }
+        total: { type: integer, format: int64, description: Soma das despesas do ciclo (centavos) }
+        paid_total: { type: integer, format: int64, description: Soma das parcelas pagas (centavos) }
+        open_total: { type: integer, format: int64, description: total - paid_total }
+        status: { type: string, enum: [open, closed, paid, overdue], description: open=ciclo atual; closed=fechada não paga; paid=tudo pago; overdue=fechada, vencida e não paga }
+        transaction_count: { type: integer }
+    InvoiceDetail:
+      type: object
+      properties:
+        invoice: { $ref: '#/components/schemas/Invoice' }
+        transactions:
+          type: array
+          items: { $ref: '#/components/schemas/Transaction' }
+    InvoicePayRequest:
+      type: object
+      required: [account_id]
+      properties:
+        account_id: { type: string, format: uuid, description: Conta pagadora (validada na org) }
+        paid_at: { type: string, format: date-time, nullable: true, description: Data do pagamento (padrão agora) }
+
+    GoalRequest:
+      type: object
+      required: [name, target_amount]
+      properties:
+        name: { type: string, maxLength: 120 }
+        target_amount: { type: integer, format: int64, description: Valor alvo em centavos (> 0) }
+        current_amount: { type: integer, format: int64 }
+        deadline: { type: string, format: date-time, nullable: true }
+        color: { type: string }
+    Goal:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        target_amount: { type: integer, format: int64 }
+        current_amount: { type: integer, format: int64 }
+        deadline: { type: string, format: date-time, nullable: true }
+        color: { type: string }
+        progress: { type: number, format: float, description: current/target entre 0 e 1 }
+
+    SearchNamed:
+      type: object
+      description: Resultado mínimo (id + nome) para grupos da busca global
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    SearchResult:
+      type: object
+      properties:
+        query: { type: string, description: Termo de busca ecoado }
+        total: { type: integer, description: Soma do tamanho de todos os grupos }
+        results:
+          type: object
+          properties:
+            transactions:
+              type: array
+              items: { $ref: '#/components/schemas/Transaction' }
+            contacts:
+              type: array
+              items: { $ref: '#/components/schemas/Contact' }
+            categories:
+              type: array
+              items: { $ref: '#/components/schemas/Category' }
+            accounts:
+              type: array
+              items: { $ref: '#/components/schemas/Account' }
+            credit_cards:
+              type: array
+              items: { $ref: '#/components/schemas/SearchNamed' }
+            goals:
+              type: array
+              items: { $ref: '#/components/schemas/SearchNamed' }
+
+    BudgetRequest:
+      type: object
+      required: [category_id, amount, month, year]
+      properties:
+        category_id: { type: string, format: uuid, description: Categoria de despesa da organização }
+        amount: { type: integer, format: int64, description: Teto em centavos (> 0) }
+        month: { type: integer, minimum: 1, maximum: 12 }
+        year: { type: integer, minimum: 2000, maximum: 2100 }
+    Budget:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+        category: { $ref: '#/components/schemas/Category' }
+        amount: { type: integer, format: int64 }
+        month: { type: integer }
+        year: { type: integer }
+        spent: { type: integer, format: int64, description: Despesa paga na categoria no mês/ano (centavos) }
+        percent: { type: number, format: float, description: spent/amount }
+
+    Member:
+      type: object
+      properties:
+        id: { type: string, format: uuid, description: ID da associação (membership) }
+        user: { $ref: '#/components/schemas/User' }
+        role: { type: string, enum: [owner, admin, member, viewer] }
+    UpdateMemberRequest:
+      type: object
+      required: [role]
+      properties:
+        role: { type: string, enum: [owner, admin, member, viewer] }
+
+    InvitationRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string, format: email }
+        role: { type: string, enum: [admin, member, viewer] }
+    Invitation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        role: { type: string }
+        accepted: { type: boolean }
+        token: { type: string, description: Token do convite (retornado apenas na criação) }
+        created_at: { type: string, format: date-time }
+    AcceptInvitationRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+
+    Subscription:
+      type: object
+      properties:
+        plan: { type: string, enum: [free, premium] }
+        status: { type: string, enum: [trialing, active, canceled] }
+        trial_ends_at: { type: string, format: date-time, nullable: true }
+        current_period_end: { type: string, format: date-time, nullable: true }
+        max_users: { type: integer }
+        max_transactions: { type: integer }
+        usage:
+          type: object
+          properties:
+            users: { type: integer, format: int64 }
+            transactions: { type: integer, format: int64 }
+    UpgradeRequest:
+      type: object
+      required: [plan]
+      properties:
+        plan: { type: string, enum: [free, premium] }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        title: { type: string }
+        message: { type: string }
+        read: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+    ResetPasswordRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token: { type: string }
+        password: { type: string, minLength: 8, maxLength: 72 }
+
+    BulkResult:
+      type: object
+      properties:
+        updated: { type: integer, format: int64, description: Quantidade de registros afetados }
+    BulkSettleRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items: { type: string, format: uuid }
+        account_id: { type: string, format: uuid, description: Conta de liquidação (opcional) }
+        paid_at: { type: string, format: date-time, nullable: true, description: Data da baixa (padrão agora) }
+    BulkIDsRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items: { type: string, format: uuid }
+    BulkCategorizeRequest:
+      type: object
+      required: [ids, category_id]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items: { type: string, format: uuid }
+        category_id: { type: string, format: uuid }
+
+    Session:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_agent: { type: string }
+        ip: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+    RevokeOtherSessionsRequest:
+      type: object
+      properties:
+        keep_refresh_token: { type: string, description: Refresh token bruto da sessão atual a preservar (opcional) }
+
+    ReportSummary:
+      type: object
+      properties:
+        income: { type: integer, format: int64, description: Receitas do período (centavos) }
+        expense: { type: integer, format: int64, description: Despesas do período (centavos) }
+        net: { type: integer, format: int64, description: income - expense }
+        by_category:
+          type: array
+          items: { $ref: '#/components/schemas/ReportCategoryTotal' }
+        by_month:
+          type: array
+          items: { $ref: '#/components/schemas/ReportMonthTotal' }
+    ReportCategoryTotal:
+      type: object
+      properties:
+        category_id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: string }
+        kind: { type: string, enum: [income, expense] }
+        total: { type: integer, format: int64 }
+    ReportMonthTotal:
+      type: object
+      properties:
+        month: { type: string, example: "2026-05" }
+        income: { type: integer, format: int64 }
+        expense: { type: integer, format: int64 }

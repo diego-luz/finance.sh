@@ -1,0 +1,334 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "new": "New",
+    "back": "Back",
+    "confirm": "Confirm",
+    "search": "Search",
+    "searchPlaceholder": "Search…",
+    "loading": "Loading",
+    "noResults": "No results",
+    "close": "Close",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "toast": {
+      "saved": "Saved successfully.",
+      "deleted": "Deleted successfully.",
+      "error": "An error occurred. Please try again.",
+      "genericSuccess": "Operation completed successfully.",
+      "genericError": "The operation could not be completed."
+    }
+  },
+  "nav": {
+    "menu": "Menu",
+    "dashboard": "Overview",
+    "transactions": "Transactions",
+    "recurrences": "Recurrences",
+    "accountsPayable": "Accounts Payable",
+    "accountsReceivable": "Accounts Receivable",
+    "forecast": "Forecast",
+    "reports": "Reports",
+    "accounts": "Accounts",
+    "creditCards": "Credit Cards",
+    "contacts": "Contacts",
+    "categories": "Categories",
+    "tags": "Tags",
+    "categorization": "Categorization",
+    "budgets": "Budgets",
+    "goals": "Goals",
+    "team": "Team",
+    "audit": "Audit",
+    "settings": "Settings",
+    "operational": "Operational",
+    "allSystemsOperational": "All systems operational.",
+    "logout": "Sign out",
+    "myProfile": "My profile",
+    "userMenu": "User menu"
+  },
+  "footer": {
+    "rights": "© {{year}} finance.sh. All rights reserved.",
+    "terms": "Terms of Use",
+    "privacy": "Privacy"
+  },
+  "auth": {
+    "tagline": "Open-source self-hosted financial control",
+    "brandHeadline": "Smart financial control for your business.",
+    "brandSubtitle": "Centralize accounts, transactions and reports in a single vault — with the clarity your company needs to grow.",
+    "feature1": "Real-time cash flow and reports",
+    "feature2": "Multi-organization with access control",
+    "fields": {
+      "email": "Email",
+      "password": "Password",
+      "name": "Your name",
+      "organizationName": "Company name",
+      "organizationCurrency": "Organization currency",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm password",
+      "verificationCode": "Verification code"
+    },
+    "placeholders": {
+      "email": "you@company.com",
+      "name": "John Doe",
+      "organizationName": "My Company Inc.",
+      "password": "••••••••",
+      "passwordMin": "At least 8 characters",
+      "code": "000000"
+    },
+    "login": {
+      "title": "Sign in to your account",
+      "subtitle": "Access your financial control.",
+      "forgotPassword": "Forgot password?",
+      "submit": "Sign in",
+      "noAccount": "Don't have an account yet?"
+    },
+    "mfa": {
+      "title": "Two-factor verification",
+      "subtitle": "Enter the 6-digit code from your authenticator app.",
+      "protected": "Your account is protected with two-factor authentication.",
+      "submit": "Verify and sign in",
+      "backToLogin": "Back to sign in"
+    },
+    "register": {
+      "title": "Create your account",
+      "subtitle": "Start organizing your company's finances in minutes.",
+      "acceptTermsPrefix": "I have read and accept the",
+      "termsOfUse": "Terms of Use",
+      "and": "and the",
+      "privacyPolicy": "Privacy Policy",
+      "submit": "Create account",
+      "hasAccount": "Already have an account?",
+      "signIn": "Sign in"
+    },
+    "forgot": {
+      "title": "Recover password",
+      "subtitle": "Enter your email and we'll send a link to reset your password.",
+      "submit": "Send recovery link",
+      "backToLogin": "Back to sign in",
+      "sentTitle": "Check your email",
+      "sentSubtitle": "We've sent instructions to reset your password.",
+      "sentBodyPrefix": "If an account exists for",
+      "sentBodySuffix": ", you'll receive a reset link shortly.",
+      "noEmailTitle": "Request received",
+      "noEmailSubtitle": "This server does not send e-mails.",
+      "noEmailBody": "E-mail delivery is not configured on this instance. If you run the server, the reset link is written to the log (docker compose logs app) or use the reset command in the terminal. Otherwise, ask the instance administrator."
+    },
+    "reset": {
+      "title": "Reset password",
+      "subtitle": "Choose a new password to access your account.",
+      "submit": "Reset password",
+      "backToLogin": "Back to sign in",
+      "invalidTitle": "Invalid link",
+      "invalidSubtitle": "We couldn't identify the reset token.",
+      "invalidBody": "The reset link is invalid or has expired. Request a new password recovery link.",
+      "requestNew": "Request a new link"
+    },
+    "verify": {
+      "title": "Email verification",
+      "subtitle": "Confirming your finance.sh account.",
+      "verifyingTitle": "Confirming your email…",
+      "verifyingText": "Please wait a moment while we validate your link.",
+      "successTitle": "Email confirmed!",
+      "successText": "Your account is verified. You can now access the platform securely.",
+      "errorTitle": "Could not confirm",
+      "errorText": "The link may have expired or already been used.",
+      "errorFallback": "We couldn't confirm the email.",
+      "missingTitle": "Invalid link",
+      "missingText": "No verification token was provided. Use the link sent to your email.",
+      "goToDashboard": "Go to dashboard",
+      "signIn": "Sign in",
+      "backToDashboard": "Back to dashboard",
+      "backToLogin": "Back to sign in"
+    },
+    "errors": {
+      "nameMin": "Please enter your full name (min. 2 characters).",
+      "emailRequired": "Please enter your email.",
+      "emailInvalid": "Invalid email.",
+      "passwordMin": "Password must be at least 8 characters.",
+      "confirmRequired": "Please confirm the password.",
+      "passwordsMismatch": "Passwords don't match.",
+      "orgNameMin": "Please enter the organization name (min. 2 characters)."
+    }
+  },
+  "dashboard": {
+    "eyebrow": "Dashboard",
+    "title": "Overview",
+    "description": "Track your organization's financial health.",
+    "kpi": {
+      "currentBalance": "Current balance",
+      "monthIncome": "Income this month",
+      "monthExpense": "Expenses this month",
+      "monthResult": "Result this month",
+      "balanceSum": "Sum of all accounts",
+      "surplus": "Surplus",
+      "deficit": "Deficit"
+    },
+    "loadError": "Could not load the dashboard. Check your connection and try again.",
+    "cashFlow": {
+      "eyebrow": "Cash flow",
+      "title": "Income vs Expenses",
+      "subtitle": "Last 6 months",
+      "income": "Income",
+      "expense": "Expenses"
+    },
+    "topCategories": {
+      "eyebrow": "Distribution",
+      "title": "Top categories",
+      "subtitle": "Expenses this month",
+      "emptyTitle": "No category data",
+      "emptyDescription": "This month's transactions will appear grouped here."
+    },
+    "upcomingBills": {
+      "title": "Upcoming bills",
+      "subtitle": "Next payments",
+      "emptyTitle": "All caught up",
+      "emptyDescription": "No bills due at the moment.",
+      "due": "Due {{date}}"
+    },
+    "accountsSummary": {
+      "title": "Your accounts",
+      "subtitle": "Balance by account",
+      "emptyTitle": "No accounts yet",
+      "emptyDescription": "Add an account to start recording transactions."
+    },
+    "goals": {
+      "title": "Goals",
+      "subtitle": "Progress toward your objectives",
+      "seeAll": "See all",
+      "emptyTitle": "No goals",
+      "emptyDescription": "Create goals to track your objectives."
+    },
+    "creditCards": {
+      "title": "Credit cards",
+      "subtitle": "Limit usage",
+      "seeAll": "See all",
+      "emptyTitle": "No cards",
+      "emptyDescription": "Add cards to track their limits.",
+      "available": "avail."
+    },
+    "forecast": {
+      "title": "Cash forecast",
+      "subtitle": "Next 3 months",
+      "seeForecast": "See forecast",
+      "currentBalance": "Current balance",
+      "projectedBalance": "Projected balance (end)",
+      "negativeWarning": "Projected balance is negative in some month of the period.",
+      "positiveNote": "Projected balance is positive throughout the period."
+    }
+  },
+  "settings": {
+    "eyebrow": "Account",
+    "title": "Settings",
+    "description": "Manage your profile, organization and preferences.",
+    "profile": {
+      "eyebrow": "01 · Profile",
+      "title": "Your profile",
+      "subtitle": "Your user account information.",
+      "emailVerified": "Email verified",
+      "emailNotVerified": "Email not verified",
+      "resendVerification": "Resend confirmation",
+      "editProfile": "Edit profile"
+    },
+    "appearance": {
+      "eyebrow": "03 · Appearance",
+      "title": "Theme and privacy",
+      "subtitle": "Customize the appearance and how values are shown.",
+      "darkMode": "Dark mode",
+      "lightMode": "Light mode",
+      "themeSavedHint": "Preference saved on this device.",
+      "valuesHidden": "Values hidden",
+      "valuesVisible": "Values visible",
+      "valuesHint": "Hide monetary values on screen. Saved on this device."
+    },
+    "edition": {
+      "eyebrow": "04 · About",
+      "title": "finance.sh",
+      "license": "AGPL-3.0",
+      "description": "100% open-source, self-hosted. No limits on users, organizations or transactions, and no paid editions.",
+      "github": "★ Star on GitHub"
+    },
+    "twoFactor": {
+      "title": "Two-factor authentication (2FA)"
+    },
+    "organization": {
+      "title": "Organization"
+    },
+    "sessions": {
+      "title": "Active sessions"
+    },
+    "privacyData": {
+      "title": "Privacy & Data"
+    },
+    "export": {
+      "eyebrow": "Data",
+      "title": "Export data",
+      "subtitle": "Download your data in Excel, PDF or CSV."
+    },
+    "danger": {
+      "eyebrow": "Danger zone",
+      "title": "End session",
+      "subtitle": "You'll need to sign in again to access the dashboard.",
+      "logout": "Sign out"
+    }
+  },
+  "language": {
+    "label": "Language",
+    "hint": "Interface language. Saved on this device.",
+    "pt-BR": "Português",
+    "en": "English",
+    "es": "Español"
+  },
+  "setup": {
+    "title": "Initial setup",
+    "subtitle": "Welcome to finance.sh. Let's create the first user and your organization.",
+    "stepCounter": "Step {{current}} of {{total}}",
+    "success": "Platform set up successfully!",
+    "steps": {
+      "user": {
+        "title": "Administrator",
+        "short": "Administrator",
+        "passwordHint": "At least 8 characters. Use the generator for a strong password.",
+        "fields": {
+          "name": "Your name",
+          "email": "Email",
+          "password": "Password",
+          "confirmPassword": "Confirm password"
+        }
+      },
+      "org": {
+        "title": "Organization",
+        "short": "Organization",
+        "hint": "The primary currency sets the default display format. You can change it later.",
+        "fields": {
+          "name": "Organization name",
+          "currency": "Primary currency"
+        }
+      },
+      "review": {
+        "title": "Review",
+        "short": "Review",
+        "adminTitle": "Administrator",
+        "orgTitle": "Organization",
+        "notice": "This is the platform's first account. It will have full access and can create more users later."
+      }
+    },
+    "actions": {
+      "previous": "Previous",
+      "next": "Next",
+      "finish": "Finish and sign in",
+      "suggestPassword": "Suggest strong password",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "errors": {
+      "already_initialized": "The platform has already been set up. Please sign in to continue.",
+      "weak_password": "Password is too weak. Use at least 8 characters.",
+      "invalid_currency": "Invalid currency.",
+      "generic": "Could not complete setup. Please try again.",
+      "emptyPassword": "Fill or generate a password before copying.",
+      "copyFailed": "Couldn't copy. Please select and copy manually."
+    }
+  }
+}

@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light theme tokens */
+    --bg: 243 244 246; /* #f3f4f6 */
+    --surface: 255 255 255; /* #ffffff */
+    --elevated: 255 255 255;
+    --border: 229 231 235; /* #e5e7eb */
+    --text: 17 24 39; /* #111827 */
+    --text-muted: 107 114 128; /* #6b7280 */
+  }
+
+  .dark {
+    /* Dark theme tokens */
+    --bg: 15 17 21; /* #0f1115 */
+    --surface: 22 24 29; /* #16181d */
+    --elevated: 28 31 38; /* #1c1f26 */
+    --border: 38 41 50; /* #262932 */
+    --text: 237 240 244;
+    --text-muted: 148 156 169;
+  }
+
+  * {
+    @apply border-gray-200 dark:border-ink-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-gray-100 text-gray-900 dark:bg-ink-base dark:text-gray-100;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Manrope', system-ui, sans-serif;
+    letter-spacing: -0.015em;
+  }
+
+  /* Focus rings */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary/60 ring-offset-2 ring-offset-white dark:ring-offset-ink-base;
+  }
+
+  /* Numeric tabular alignment for money */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Privacy mode: blur every monetary value when <html> has `.values-hidden`.
+     The underlying text stays in the DOM (acceptable for a privacy toggle) but
+     is visually redacted. Transitions back smoothly when revealed. */
+  .money,
+  .money-sensitive {
+    transition: filter 0.15s ease;
+  }
+  .values-hidden .money,
+  .values-hidden .money-sensitive {
+    filter: blur(0.5rem);
+    user-select: none;
+    cursor: default;
+  }
+  /* Charts can't have individual labels/tooltips classed, so the whole chart
+     container is marked `.money-sensitive`; block pointer events while hidden
+     so tooltips can't reveal exact values. */
+  .values-hidden .money-sensitive {
+    pointer-events: none;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-gray-200 bg-white shadow-soft dark:border-ink-border dark:bg-ink-surface;
+  }
+
+  .input-base {
+    @apply w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 transition focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-ink-border dark:bg-ink-elevated dark:text-gray-100 dark:placeholder:text-gray-500;
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-gray-200/80 dark:bg-ink-elevated;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.12),
+      transparent
+    );
+    animation: shimmer 1.6s infinite;
+  }
+
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+}
+
+@layer utilities {
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-gray-300 dark:bg-ink-border;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400 dark:bg-gray-600;
+  }
+}

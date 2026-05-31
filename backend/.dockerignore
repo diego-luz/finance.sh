@@ -1,0 +1,26 @@
+# VCS & local tooling
+.git
+.gitignore
+.github
+
+# Build artifacts
+bin/
+*.exe
+*.test
+*.out
+
+# Local config & secrets
+.env
+.env.*
+*.local
+
+# Editor / OS noise
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Docs are copied explicitly in the Dockerfile (do not ignore docs/),
+# but ignore the container build context noise:
+tmp/
+*.log
