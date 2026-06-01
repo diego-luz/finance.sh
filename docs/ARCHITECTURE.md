@@ -204,6 +204,21 @@ token** de vida longa (7 dias) com **rotação**: cada uso do refresh invalida o
 anterior e emite um novo par. O refresh é guardado como **hash** no banco, então pode
 ser revogado server-side (logout, troca de senha, detecção de reuso).
 
+### Primeiro acesso (first-boot)
+
+Numa instância recém-subida o banco não tem usuários. O caminho **padrão e
+recomendado** é o **setup wizard**: a SPA consulta `GET /api/v1/setup/status`,
+vê `needs_setup=true` e redireciona para `/setup`, onde o operador cria o
+primeiro **super-admin + organização** via `POST /api/v1/setup/initialize`. Esse
+endpoint é idempotente — a criação roda numa transação com guarda
+`count(users) == 0`, então uma 2ª chamada retorna `409`. Nada de segredo é
+exibido na UI: o operador escolhe a senha.
+
+Alternativa **headless** para automação/CI (`BOOTSTRAP_ADMIN=true`, default
+`false`): a app cria o super-admin no boot e, se `ADMIN_PASSWORD` estiver vazio,
+gera uma senha aleatória e a imprime no log. Em ambos os casos o usuário criado
+é super-admin **e** owner da primeira organização (não há "admin separado").
+
 ### Registro → bootstrap da organização
 
 No registro, além de criar o `User`, o sistema **provisiona automaticamente uma

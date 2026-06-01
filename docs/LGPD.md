@@ -67,7 +67,7 @@ específico.
 | Direito | Como o finance.sh atende |
 |---|---|
 | **Confirmação e acesso** | Endpoint de perfil (`/me`) e exportação. |
-| **Portabilidade** | `GET /me/export` — exporta os dados do titular em formato estruturado (JSON). |
+| **Portabilidade** | `GET /me/export` — exporta os dados do titular em formato estruturado (JSON); `POST /me/import` reimporta esse JSON numa organização nova (portabilidade de entrada). |
 | **Eliminação / anonimização** | `DELETE /me/account` — remove/anonimiza a conta e dados associados; soft delete seguido de **purga** após `RETENTION_DAYS`. |
 | **Correção** | Edição de dados de perfil e registros via API/UI. |
 | **Revogação de consentimento** | Gerenciamento de opt-ins; consentimento **versionado** (`TERMS_VERSION`) para rastrear aceite/revogação. |

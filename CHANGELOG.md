@@ -27,11 +27,12 @@ Formato baseado em [Keep a Changelog 1.1.0](https://keepachangelog.com/pt-BR/1.1
 - **Lockout** de força bruta (`LOGIN_MAX_ATTEMPTS=5`, `LOGIN_LOCKOUT_MIN=15`).
 - **2FA TOTP** (`pquerna/otp`) com **códigos de recuperação** únicos.
 - **Verificação de e-mail** com token, fluxo de **esqueci minha senha** e **troca obrigatória de senha no primeiro acesso**.
+- **Esqueci a senha sem SMTP**: quando o servidor não tem e-mail configurado, o link de redefinição é escrito no log (`docker compose logs app`) e há o **comando CLI** `docker compose run --rm app -reset-password <email>` (gera senha aleatória, força troca, revoga sessões). O super-admin também pode resetar a senha de outro usuário pelo `/admin`. O endpoint `/forgot-password` retorna `email_sent` (nível de instância, sem revelar se a conta existe) para a UI orientar o usuário.
 - **Sessões** listáveis e revogáveis em Settings.
 - **AES-256-GCM** para criptografia de campo (PII: notas de transação, segredo TOTP). Chave via `ENCRYPTION_KEY` (`openssl rand -base64 32`).
 - **RBAC** granular: `owner`, `admin`, `member`, `viewer`.
 - **Super-admin** de plataforma (back-office `/admin`) separado do RBAC por organização.
-- **Admin de primeiro boot** (`BOOTSTRAP_ADMIN`, default true): banco vazio → cria super-admin + organização automaticamente, forçando troca de senha no 1º login. `ADMIN_PASSWORD` vazio gera senha aleatória forte e a imprime no log do boot.
+- **Admin de primeiro boot headless** (`BOOTSTRAP_ADMIN`, default **false** — opt-in): para deploys automatizados, banco vazio → cria super-admin + organização no boot, forçando troca de senha no 1º login. `ADMIN_PASSWORD` vazio gera senha aleatória forte e a imprime no log. Default é `false` porque o caminho seguro/recomendado é o **setup wizard** (não expõe segredo na UI web).
 - **Middleware de cabeçalhos de segurança** (Go): X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy e **CSP** compatível com a SPA Vite em toda resposta; HSTS quando atrás de TLS (`X-Forwarded-Proto: https`).
 - **Rate limiting** por IP (`RATE_LIMIT_RPM=120`, token bucket in-memory).
 - **CORS** restrito por allowlist (`CORS_ORIGINS`).
@@ -47,6 +48,7 @@ Formato baseado em [Keep a Changelog 1.1.0](https://keepachangelog.com/pt-BR/1.1
 - **Convites de membros** por e-mail com escolha de papel.
 - Cabeçalho **`X-Organization-ID`** definindo tenant ativo da requisição.
 - Múltiplas memberships por usuário — troca de org sem re-login.
+- **Criar organização self-service** (`POST /api/v1/organizations`): o usuário logado cria orgs adicionais (ex.: separar "Casa" de "Microempresa"), vira proprietário e recebe o seed de categorias/contas. Card "Nova organização" em Settings, com troca automática de contexto.
 
 ### Added — Gestão financeira
 
@@ -72,6 +74,7 @@ Formato baseado em [Keep a Changelog 1.1.0](https://keepachangelog.com/pt-BR/1.1
 - **Export** **Excel** (`excelize`), **PDF** (`go-pdf/fpdf`) e **CSV** com download direto.
 - **Anexos** de comprovante (recibo, nota fiscal) em transações, armazenados em **Postgres BYTEA**. Limite por anexo `ATTACHMENT_MAX_MB=10`.
 - **Import OFX/CSV** de extrato bancário com dedup + sugestão de categoria.
+- **Importar meus dados** (`POST /api/v1/me/import`): restaura o JSON do "Exportar meus dados" numa **organização nova** (remapeando UUIDs e preservando relações), sem sobrescrever dados existentes. Card "Importar dados" em Settings.
 
 ### Added — Plataforma
 
@@ -79,7 +82,7 @@ Formato baseado em [Keep a Changelog 1.1.0](https://keepachangelog.com/pt-BR/1.1
 - **i18n** em 3 idiomas: **pt-BR** (primário), **en**, **es** via `react-i18next`.
 - **Modo privacidade** que oculta valores no dashboard — toggle persistente.
 - **Dark mode** com detecção de preferência do SO.
-- **Setup wizard** de primeiro acesso (alternativa ao admin de boot, via `BOOTSTRAP_ADMIN=false`): detecta DB vazio, guia em 3 passos e cria o primeiro super-admin + organização em transação atômica. `GET /api/v1/setup/status` + `POST /api/v1/setup/initialize`.
+- **Setup wizard** de primeiro acesso (**caminho padrão**, com `BOOTSTRAP_ADMIN=false`): detecta DB vazio, redireciona a SPA para `/setup`, guia em 3 passos e cria o primeiro super-admin + organização em transação atômica (sem exibir senha gerada na UI). `GET /api/v1/setup/status` + `POST /api/v1/setup/initialize` (idempotente — 2ª chamada = 409).
 - **Consentimento LGPD** versionado (`TERMS_VERSION`).
 - **Exportar meus dados** (LGPD art. 18 II) em JSON e **excluir minha conta** com confirmação dupla + audit log.
 - Banner de cookies com opt-in/opt-out persistente.
@@ -121,7 +124,8 @@ GitHub Actions workflow `.github/workflows/ci.yml` com:
 - JWT secrets separados pra access vs refresh; refresh rotaciona a cada uso e fica como hash no DB.
 - Postgres com `DB_SSLMODE=prefer` em dev, `require`/`verify-full` em prod.
 - Container `cap_drop: ALL` + `no-new-privileges`; imagem com user non-root (`finance_sh` UID 10001).
-- Guarda de produção: a app se recusa a subir com secrets default (JWT/`ENCRYPTION_KEY`) quando `APP_ENV=production`.
+- Guarda de produção: a app se recusa a subir com secrets default (JWT/`ENCRYPTION_KEY`) quando `APP_ENV=production`. O `.env.example` usa propositalmente a chave de exemplo que o guard rejeita.
+- Anti-enumeração no `/forgot-password`: resposta genérica e o token de redefinição **nunca** retorna no corpo (vai por e-mail/log/CLI), evitando vazamento de token via API.
 - LGPD: `docs/LGPD.md` esclarece que em self-hosted o **operador** é o **controlador** dos dados. Ferramentas pra direitos do titular já incluídas.
 
 ### Notes

@@ -2,16 +2,24 @@ openapi: 3.0.3
 info:
   title: finance.sh API
   description: >
-    API REST do finance.sh, um SaaS financeiro multi-tenant. Todas as respostas usam
-    um envelope padrão `{ success, data, error, meta }`. Endpoints protegidos
-    exigem um token JWT (Authorization: Bearer) e o cabeçalho
-    `X-Organization-ID` para selecionar o tenant ativo.
+    API REST do finance.sh — app de controle financeiro open-source, self-hosted e
+    multi-organização (row-level por `org_id`). Servida pelo mesmo binário Go que
+    embute a SPA. Todas as respostas usam um envelope padrão
+    `{ success, data, error, meta }`. Endpoints protegidos exigem um token JWT
+    (Authorization: Bearer) e o cabeçalho `X-Organization-ID` para selecionar a
+    organização ativa (rotas tenant-agnósticas como setup, /me e POST
+    /organizations dispensam o cabeçalho).
   version: 1.0.0
 servers:
   - url: /api/v1
     description: Base path da API
 
 tags:
+  - name: Setup
+    description: >
+      Configuração inicial (first-boot). Quando o banco está vazio a SPA cai em
+      `/setup` para o operador criar o primeiro super-admin + organização. Rotas
+      públicas, sem autenticação; `initialize` é idempotente (2ª chamada = 409).
   - name: Auth
     description: Cadastro, login e gestão de sessão
   - name: Accounts
@@ -50,8 +58,6 @@ tags:
     description: Membros e papéis da organização
   - name: Invitations
     description: Convites de novos membros
-  - name: Subscription
-    description: Plano e uso da assinatura
   - name: Notifications
     description: Alertas in-app
   - name: Reports
@@ -69,11 +75,6 @@ tags:
       Back-office da plataforma (super-administrador). Endpoints platform-wide,
       NÃO escopados por tenant: exigem Authorization Bearer de um usuário com
       super_admin=true e não usam o cabeçalho X-Organization-ID.
-  - name: Leads
-    description: >
-      Captação de leads pelo formulário público "Solicitar acesso" da landing
-      page (POST anônimo) e gestão pelo super-admin (listar, atualizar status/
-      observações, descartar e provisionar a organização a partir do lead).
 
 security:
   - bearerAuth: []
@@ -98,6 +99,55 @@ paths:
                         type: object
                         properties:
                           status: { type: string, example: ok }
+
+  /setup/status:
+    get:
+      tags: [Setup]
+      summary: Indica se a instância precisa de configuração inicial
+      description: "Retorna `needs_setup=true` enquanto não houver nenhum usuário no banco. Rota pública usada pela SPA para redirecionar a `/setup`."
+      security: []
+      responses:
+        '200':
+          description: Estado do setup
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          needs_setup: { type: boolean }
+
+  /setup/initialize:
+    post:
+      tags: [Setup]
+      summary: Cria o primeiro super-admin + organização (first-boot)
+      description: >
+        Idempotente por design: a criação é protegida por uma transação com guarda
+        `count(users) == 0`. Se já existir qualquer usuário retorna 409
+        (already_initialized). Cria o usuário como super-admin com a senha escolhida
+        pelo operador (sem segredo gerado/exibido), a organização, a associação de
+        proprietário e semeia categorias/contas padrão. Não exige autenticação.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetupInitializeRequest' }
+      responses:
+        '201':
+          description: Plataforma inicializada (retorna sessão já autenticada)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthEnvelope' }
+        '409':
+          description: A plataforma já foi inicializada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /auth/register:
     post:
@@ -257,9 +307,13 @@ paths:
       tags: [Auth]
       summary: Solicita redefinição de senha
       description: >
-        Sempre retorna 200 com mensagem genérica (não revela se o e-mail existe).
-        Em ambiente de desenvolvimento, o token de redefinição é retornado em
-        `data.reset_token` para facilitar testes.
+        Sempre retorna 200 com mensagem genérica (não revela se o e-mail existe —
+        anti-enumeração). O token NUNCA volta no corpo da resposta; quando SMTP
+        está configurado o link vai por e-mail, caso contrário é escrito no log do
+        servidor (`docker compose logs app`). O flag `data.email_sent` reflete se a
+        instância tem SMTP (nível de instância, não revela se a conta existe) — o
+        frontend usa para mostrar "verifique o e-mail" ou "o servidor não envia
+        e-mail, veja o log / use o comando de reset / peça ao administrador".
       security: []
       requestBody:
         required: true
@@ -279,7 +333,7 @@ paths:
                         type: object
                         properties:
                           message: { type: string }
-                          reset_token: { type: string, description: Somente em desenvolvimento }
+                          email_sent: { type: boolean, description: "true se a instância tem SMTP configurado (link foi enviado por e-mail); false = link só no log do servidor / via CLI" }
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /auth/reset-password:
@@ -438,6 +492,40 @@ paths:
             application/json:
               schema: { type: object }
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/import:
+    post:
+      tags: [Account]
+      summary: Importa dados de um export para uma NOVA organização
+      description: >
+        Recebe o JSON gerado por `GET /me/export` e restaura o conteúdo financeiro
+        numa organização NOVA, da qual o usuário autenticado vira proprietário (não
+        sobrescreve dados existentes). Os UUIDs antigos são remapeados para novos
+        preservando as relações (FKs). Importa contas, categorias, contatos,
+        cartões, orçamentos, metas e lançamentos; ignora notificações e auditoria.
+        Tudo numa transação. Corpo = JSON cru (não multipart), limite de 25 MB.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: "Documento exportado por /me/export" }
+      responses:
+        '201':
+          description: Dados importados; resumo por entidade
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/DataImportSummary' }
+        '400':
+          description: JSON inválido ou vazio
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '413': { description: Corpo acima de 25 MB }
 
   /me/account:
     delete:
@@ -1921,6 +2009,34 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Envelope' }
 
+  /organizations:
+    post:
+      tags: [Organization]
+      summary: Cria uma organização adicional (self-service)
+      description: >
+        Permite ao usuário autenticado criar outra organização (ex.: separar "Casa"
+        de "Microempresa"). O usuário vira proprietário, ganha a associação e a nova
+        org recebe o seed de categorias/contas padrão. Rota tenant-agnóstica (não
+        exige X-Organization-ID). O frontend troca o contexto para a nova org após
+        a criação.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrgRequest' }
+      responses:
+        '201':
+          description: Organização criada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: { $ref: '#/components/schemas/Organization' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /currencies:
     get:
       tags: [Organization]
@@ -1939,44 +2055,6 @@ paths:
                         type: array
                         items: { $ref: '#/components/schemas/Currency' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-
-  /subscription:
-    get:
-      tags: [Subscription]
-      summary: Plano e uso atual
-      responses:
-        '200':
-          description: Assinatura
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data: { $ref: '#/components/schemas/Subscription' }
-
-  /subscription/upgrade:
-    post:
-      tags: [Subscription]
-      summary: Altera o plano (owner)
-      description: Sem cobrança real — ponto de integração futura (Stripe/Mercado Pago/Asaas).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/UpgradeRequest' }
-      responses:
-        '200':
-          description: Plano atualizado
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data: { $ref: '#/components/schemas/Subscription' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '422': { $ref: '#/components/responses/ValidationError' }
 
   /notifications:
     get:
@@ -2347,94 +2425,6 @@ paths:
                         items: { $ref: '#/components/schemas/AdminOrg' }
                       meta: { $ref: '#/components/schemas/PageMeta' }
         '403': { $ref: '#/components/responses/Forbidden' }
-    post:
-      tags: [Admin]
-      summary: Provisiona uma nova organização + proprietário (super-admin)
-      description: >
-        O super-admin digita a senha inicial (`initial_password`) no momento da
-        criação. O serviço cria o usuário proprietário com essa senha hashada,
-        `must_change_password=true` (o usuário precisa trocar no primeiro login)
-        e `email_verified=true` (admin já validou o e-mail fora da plataforma),
-        cria a organização, a associação de proprietário e uma assinatura, e
-        semeia categorias/contas padrão. O operador define a senha inicial (o
-        usuário troca no primeiro login). Ignora o gate de cadastro fechado.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/AdminProvisionRequest' }
-      responses:
-        '201':
-          description: Organização provisionada
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data: { $ref: '#/components/schemas/AdminProvisionResponse' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409':
-          description: E-mail do proprietário já cadastrado
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Envelope' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /admin/organizations/{id}/suspend:
-    post:
-      tags: [Admin]
-      summary: Suspende uma organização (super-admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-      responses:
-        '200': { description: Organização suspensa }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /admin/organizations/{id}/unsuspend:
-    post:
-      tags: [Admin]
-      summary: Reativa uma organização (super-admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-      responses:
-        '200': { description: Organização reativada }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /admin/organizations/{id}/plan:
-    put:
-      tags: [Admin]
-      summary: Altera o plano da assinatura de uma organização (super-admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/AdminPlanRequest' }
-      responses:
-        '200':
-          description: Assinatura atualizada
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data: { $ref: '#/components/schemas/Subscription' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
 
   /admin/users:
     get:
@@ -2494,232 +2484,6 @@ paths:
         '200': { description: Usuário reativado }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-
-  /admin/users/{id}/organizations:
-    post:
-      tags: [Admin]
-      summary: Provisiona organização adicional para um usuário existente (super-admin)
-      description: >
-        Cria uma organização adicional cujo proprietário é o usuário informado
-        pelo path `id`. Não exige senha — o usuário já possui uma. Cria a
-        organização (slug + sufixo), a associação de proprietário e uma
-        assinatura (mesmos limites de Provision: free 1 usuário / 500 tx;
-        premium 10 usuários / 100000 tx). Faz seed das categorias/contas
-        padrão.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/AdminProvisionForUserRequest' }
-      responses:
-        '201':
-          description: Organização provisionada
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data: { $ref: '#/components/schemas/AdminProvisionResponse' }
-        '403':
-          description: Conta desativada (account_disabled) ou sem permissão
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Envelope' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /admin/organizations/{id}/members:
-    post:
-      tags: [Admin]
-      summary: Vincula um usuário existente a uma organização (super-admin)
-      description: >
-        Adiciona um membro a uma organização existente diretamente, sem o
-        fluxo de convite/aceite. Respeita o limite de usuários do plano
-        (`max_users`) da assinatura da organização (402 quando excedido).
-        Recusa quando a organização está suspensa (409) ou quando o usuário
-        está desativado (403).
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/AdminAddMemberRequest' }
-      responses:
-        '201':
-          description: Membro adicionado
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data: { $ref: '#/components/schemas/AdminAddMemberResponse' }
-        '402':
-          description: Limite de usuários do plano atingido (user_limit)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Envelope' }
-        '403':
-          description: Conta desativada (account_disabled) ou sem permissão
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Envelope' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409':
-          description: Organização suspensa (org_suspended) ou usuário já é membro (already_member)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Envelope' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /leads:
-    post:
-      tags: [Leads]
-      summary: Captura pública de lead (formulário "Solicitar acesso")
-      description: >
-        Endpoint público, anônimo. A landing page envia o lead pelo formulário
-        "Solicitar acesso". Defesas:
-
-        - Honeypot: campos opcionais `hp` e `website` (esconder via CSS). Se
-          qualquer um vier preenchido, o servidor responde 201 sem persistir.
-
-        - Dedupe por e-mail: se já existe um lead com o mesmo `email` e
-          `status=new` criado na última hora, o endpoint NÃO cria um novo
-          (retorna 201 com a mesma mensagem). O formulário sempre tem sucesso
-          para o usuário.
-
-        - Rate limit global por IP (middleware) cobre flood/spam.
-
-        IP (r.RemoteAddr) e User-Agent são capturados e armazenados para
-        triagem interna; nunca são ecoados de volta nesta resposta pública.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/LeadRequest' }
-      responses:
-        '201':
-          description: Lead recebido (ou silenciosamente aceito por honeypot/dedupe)
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data: { $ref: '#/components/schemas/LeadAck' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /admin/leads:
-    get:
-      tags: [Admin, Leads]
-      summary: Lista leads capturados (super-admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - { name: status, in: query, schema: { type: string, enum: [new, contacted, converted, discarded] } }
-        - { name: search, in: query, schema: { type: string }, description: Busca por nome/e-mail/organization_name (ILIKE) }
-        - { name: page, in: query, schema: { type: integer, default: 1 } }
-        - { name: per_page, in: query, schema: { type: integer, default: 20, maximum: 100 } }
-      responses:
-        '200':
-          description: Página de leads ordenada por created_at desc
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data:
-                        type: array
-                        items: { $ref: '#/components/schemas/Lead' }
-                      meta: { $ref: '#/components/schemas/PageMeta' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /admin/leads/{id}:
-    patch:
-      tags: [Admin, Leads]
-      summary: Atualiza status/observações do lead (super-admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/LeadUpdateRequest' }
-      responses:
-        '200':
-          description: Lead atualizado
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data: { $ref: '#/components/schemas/Lead' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-    delete:
-      tags: [Admin, Leads]
-      summary: Remove (soft-delete) um lead (super-admin)
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-      responses:
-        '204': { description: Lead removido }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /admin/leads/{id}/provision:
-    post:
-      tags: [Admin, Leads]
-      summary: Provisiona uma organização a partir do lead (super-admin)
-      description: >
-        Atalho de provisionamento: reaproveita o fluxo de
-        `POST /admin/organizations` usando o e-mail do lead como `owner_email`.
-        Quando `organization_name` é omitido, cai para
-        `lead.organization_name || lead.name`; `owner_name` cai para `lead.name`.
-        No sucesso, o lead é marcado como `status=converted` e
-        `converted_org_id` aponta para a nova organização.
-      security:
-        - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/IdParam'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/AdminLeadProvisionRequest' }
-      responses:
-        '201':
-          description: Organização provisionada a partir do lead
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Envelope'
-                  - properties:
-                      data: { $ref: '#/components/schemas/AdminLeadProvisionResponse' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409':
-          description: Lead já convertido (lead_already_converted) ou e-mail já cadastrado (email_taken)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Envelope' }
-        '422': { $ref: '#/components/responses/ValidationError' }
 
 components:
   securitySchemes:
@@ -2834,6 +2598,47 @@ components:
       properties:
         created: { type: integer }
         skipped: { type: integer }
+
+    SetupInitializeRequest:
+      type: object
+      required: [name, email, password, organization_name]
+      description: Dados do primeiro super-admin + organização (first-boot).
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, maxLength: 72 }
+        organization_name: { type: string, minLength: 2, maxLength: 120 }
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: "Moeda da organização (ISO-4217). Opcional; padrão BRL."
+          example: BRL
+    CreateOrgRequest:
+      type: object
+      required: [name]
+      description: Criação self-service de organização adicional.
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: "Moeda da organização (ISO-4217). Opcional; padrão BRL."
+          example: BRL
+    DataImportSummary:
+      type: object
+      description: Contagem por entidade importada por POST /me/import.
+      properties:
+        organization_id: { type: string, format: uuid, description: ID da nova organização criada }
+        organization_name: { type: string }
+        accounts: { type: integer }
+        categories: { type: integer }
+        contacts: { type: integer }
+        credit_cards: { type: integer }
+        budgets: { type: integer }
+        goals: { type: integer }
+        transactions: { type: integer }
 
     RegisterRequest:
       type: object
@@ -2969,8 +2774,6 @@ components:
         organizations: { type: integer, format: int64 }
         users: { type: integer, format: int64 }
         transactions: { type: integer, format: int64 }
-        active_subscriptions: { type: integer, format: int64 }
-        suspended_orgs: { type: integer, format: int64 }
     AdminOrgOwner:
       type: object
       properties:
@@ -2983,36 +2786,11 @@ components:
         id: { type: string, format: uuid }
         name: { type: string }
         slug: { type: string }
-        plan: { type: string, enum: [free, premium] }
         currency: { type: string }
-        suspended: { type: boolean }
         owner: { $ref: '#/components/schemas/AdminOrgOwner' }
         members: { type: integer, format: int64 }
         transactions: { type: integer, format: int64 }
         created_at: { type: string, format: date-time }
-    AdminProvisionRequest:
-      type: object
-      required: [organization_name, owner_name, owner_email, initial_password]
-      properties:
-        organization_name: { type: string, minLength: 2, maxLength: 120 }
-        owner_name: { type: string, minLength: 2, maxLength: 120 }
-        owner_email: { type: string, format: email }
-        initial_password:
-          type: string
-          minLength: 8
-          maxLength: 72
-          description: "Senha inicial digitada pelo super-admin. O usuário provisionado deve trocá-la no primeiro login (must_change_password=true)."
-        plan: { type: string, enum: [free, premium], description: Opcional; padrão free }
-        currency: { type: string, minLength: 3, maxLength: 3, description: "Opcional; padrão BRL (ISO-4217 suportado)" }
-    AdminProvisionResponse:
-      type: object
-      properties:
-        organization: { $ref: '#/components/schemas/AdminOrg' }
-    AdminPlanRequest:
-      type: object
-      required: [plan]
-      properties:
-        plan: { type: string, enum: [free, premium] }
     AdminUser:
       type: object
       properties:
@@ -3027,117 +2805,6 @@ components:
           type: array
           items: { type: string }
           description: Nomes das organizações das quais o usuário é membro
-    AdminProvisionForUserRequest:
-      type: object
-      required: [organization_name]
-      description: >
-        Cria uma organização adicional para um usuário existente (sem senha).
-        Plan/Currency são opcionais (padrão free/BRL).
-      properties:
-        organization_name: { type: string, minLength: 2, maxLength: 120 }
-        plan: { type: string, enum: [free, premium], description: Opcional; padrão free }
-        currency: { type: string, minLength: 3, maxLength: 3, description: "Opcional; padrão BRL (ISO-4217 suportado)" }
-    AdminAddMemberRequest:
-      type: object
-      required: [user_id, role]
-      properties:
-        user_id: { type: string, format: uuid }
-        role: { type: string, enum: [owner, admin, member, viewer] }
-    AdminMembership:
-      type: object
-      properties:
-        id: { type: string, format: uuid, description: ID da associação (membership) }
-        user:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            name: { type: string }
-            email: { type: string }
-        role: { type: string, enum: [owner, admin, member, viewer] }
-    AdminAddMemberResponse:
-      type: object
-      properties:
-        membership: { $ref: '#/components/schemas/AdminMembership' }
-
-    LeadRequest:
-      type: object
-      required: [name, email, profile_type]
-      description: >
-        Payload do formulário público "Solicitar acesso". `hp` e `website`
-        são honeypots (devem permanecer vazios — preenchimento aciona
-        aceite-silencioso sem persistência).
-      properties:
-        name: { type: string, minLength: 2, maxLength: 120 }
-        email: { type: string, format: email }
-        phone: { type: string, maxLength: 30 }
-        organization_name:
-          type: string
-          maxLength: 120
-          description: Nome da PJ/MEI quando o prospecto já tem em mente
-        profile_type:
-          type: string
-          enum: [pessoa, mei, empresa]
-        message: { type: string, maxLength: 1000 }
-        hp: { type: string, description: "Honeypot — não preencher." }
-        website: { type: string, description: "Honeypot — não preencher." }
-    LeadAck:
-      type: object
-      description: Resposta pública mínima do POST /leads (não ecoa o lead).
-      properties:
-        success: { type: boolean }
-        message: { type: string }
-    Lead:
-      type: object
-      description: Lead capturado, na visão do super-admin.
-      properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-        email: { type: string, format: email }
-        phone: { type: string }
-        organization_name: { type: string }
-        profile_type: { type: string, enum: [pessoa, mei, empresa] }
-        message: { type: string }
-        status: { type: string, enum: [new, contacted, converted, discarded] }
-        notes: { type: string, description: Observações privadas do super-admin }
-        converted_org_id:
-          type: string
-          format: uuid
-          description: Definido quando o lead foi convertido em organização via /admin/leads/{id}/provision
-        ip: { type: string }
-        user_agent: { type: string }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-    LeadUpdateRequest:
-      type: object
-      description: >
-        Atualiza status e/ou notes do lead. Ambos opcionais; ausência mantém o
-        valor atual. `notes` é nullable para permitir limpeza explícita ("").
-      properties:
-        status: { type: string, enum: [new, contacted, converted, discarded] }
-        notes: { type: string, maxLength: 2000, nullable: true }
-    AdminLeadProvisionRequest:
-      type: object
-      required: [initial_password]
-      description: >
-        Provisiona uma organização a partir de um lead. `organization_name` e
-        `owner_name` são opcionais (caem para os campos do lead quando
-        omitidos). `owner_email` NÃO é aceito — sempre vem do lead.
-      properties:
-        organization_name: { type: string, minLength: 2, maxLength: 120 }
-        owner_name: { type: string, minLength: 2, maxLength: 120 }
-        initial_password:
-          type: string
-          minLength: 8
-          maxLength: 72
-          description: Senha inicial; o usuário será obrigado a trocá-la no primeiro login.
-        plan: { type: string, enum: [free, premium], description: Opcional; padrão free }
-        currency: { type: string, minLength: 3, maxLength: 3, description: "Opcional; padrão BRL (ISO-4217 suportado)" }
-    AdminLeadProvisionResponse:
-      type: object
-      properties:
-        organization: { $ref: '#/components/schemas/AdminOrg' }
-        lead: { $ref: '#/components/schemas/Lead' }
-
     OrgUpdateRequest:
       type: object
       description: >
@@ -3637,26 +3304,6 @@ components:
       required: [token]
       properties:
         token: { type: string }
-
-    Subscription:
-      type: object
-      properties:
-        plan: { type: string, enum: [free, premium] }
-        status: { type: string, enum: [trialing, active, canceled] }
-        trial_ends_at: { type: string, format: date-time, nullable: true }
-        current_period_end: { type: string, format: date-time, nullable: true }
-        max_users: { type: integer }
-        max_transactions: { type: integer }
-        usage:
-          type: object
-          properties:
-            users: { type: integer, format: int64 }
-            transactions: { type: integer, format: int64 }
-    UpgradeRequest:
-      type: object
-      required: [plan]
-      properties:
-        plan: { type: string, enum: [free, premium] }
 
     Notification:
       type: object

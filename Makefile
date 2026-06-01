@@ -39,8 +39,8 @@ build: ## Build all images
 	$(COMPOSE) build
 
 # ---- Data / shells ----------------------------------------------------------
-seed: ## Seed demo data (restarts backend with SEED=true)
-	SEED=true $(COMPOSE) up -d --force-recreate --no-deps backend
+seed: ## Seed demo data (restarts app with SEED=true)
+	SEED=true $(COMPOSE) up -d --force-recreate --no-deps app
 
 db-shell: ## Open a psql shell on postgres
 	$(COMPOSE) exec postgres psql -U $(DB_USER) -d $(DB_NAME)
@@ -72,7 +72,7 @@ test: ## Run backend tests
 
 swagger: ## Reminder: the OpenAPI spec is hand-written
 	@echo "OpenAPI is hand-written at backend/docs/openapi.yaml — edit it directly."
-	@echo "Swagger UI is served by the backend at http://localhost:8080/swagger"
+	@echo "Swagger UI is served by the app at http://localhost:8090/swagger"
 
 # ---- Backups (encrypted) ----------------------------------------------------
 backup: ## Encrypted pg_dump (needs BACKUP_PASSPHRASE; see scripts/backup.sh)
