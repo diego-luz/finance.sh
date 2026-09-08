@@ -3,6 +3,7 @@ import { Upload } from 'lucide-react';
 import { Card, CardHeader, Button } from '@/components/ui';
 import { useToast } from '@/contexts/ToastContext';
 import { accountPrivacyService, type ImportSummary } from '@/services/accountPrivacyService';
+import { ApiRequestError } from '@/lib/axios';
 
 /**
  * Imports a previously-exported finance.sh JSON into a BRAND-NEW organization
@@ -25,8 +26,12 @@ export function ImportCard() {
       const sum = await accountPrivacyService.importData(file);
       setSummary(sum);
       toast.success(`Importado em "${sum.organization_name}".`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error?.message || 'Falha ao importar o arquivo.');
+    } catch (err) {
+      // The axios interceptor normalises failures into ApiRequestError, so the
+      // server's explanation lives on `message` — the raw axios `response` shape
+      // is already unwrapped by the time it reaches here.
+      const reason = err instanceof ApiRequestError ? err.message : '';
+      toast.error(reason || 'Falha ao importar o arquivo.');
     } finally {
       setBusy(false);
     }

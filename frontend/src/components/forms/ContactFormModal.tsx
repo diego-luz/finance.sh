@@ -6,6 +6,7 @@ import { Modal, Input, Button } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { useCreateContact, useUpdateContact } from '@/hooks';
 import type { Contact, ContactType } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z.object({
   name: z.string().min(1, 'Informe o nome do contato'),
@@ -40,6 +41,8 @@ export function ContactFormModal({ open, onClose, contact }: Props) {
     handleSubmit,
     control,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -75,7 +78,10 @@ export function ContactFormModal({ open, onClose, contact }: Props) {
       phone: values.phone || undefined,
       notes: values.notes || undefined,
     };
-    const opts = { onSuccess: onClose };
+    const opts = {
+      onSuccess: onClose,
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
+    };
     if (isEdit && contact) update.mutate({ id: contact.id, payload }, opts);
     else create.mutate(payload, opts);
   };

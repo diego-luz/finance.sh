@@ -1,9 +1,9 @@
 import { Suspense, lazy, type ReactNode } from 'react';
-import { createBrowserRouter, Navigate, Outlet } from 'react-router-dom';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { DashboardLayout } from '@/layouts/DashboardLayout';
 import { AdminLayout } from '@/layouts/AdminLayout';
-import { ProtectedRoute, PublicOnlyRoute, SetupGate } from './ProtectedRoute';
-import { Spinner } from '@/components/ui';
+import { ProtectedRoute, PublicOnlyRoute } from './ProtectedRoute';
+import { RootLayout, RouteFallback } from './RootLayout';
 
 // Lazily-loaded pages. Each becomes its own chunk, trimming the initial bundle.
 const LoginPage = lazy(() => import('@/pages/LoginPage').then((m) => ({ default: m.LoginPage })));
@@ -94,31 +94,9 @@ const AdminUsersPage = lazy(() =>
   import('@/pages/admin/AdminUsersPage').then((m) => ({ default: m.AdminUsersPage })),
 );
 
-/** Centered spinner fallback used while a lazy route chunk loads. */
-function RouteFallback() {
-  return (
-    <div className="flex min-h-[60vh] items-center justify-center">
-      <Spinner />
-    </div>
-  );
-}
-
 /** Wraps a lazily-loaded element in a Suspense boundary. */
 function withSuspense(node: ReactNode): ReactNode {
   return <Suspense fallback={<RouteFallback />}>{node}</Suspense>;
-}
-
-/**
- * Root layout: the SetupGate runs on EVERY route so the first-run wizard takes
- * priority over any deep-linked URL. The gate either renders <Outlet /> (the
- * matched route) or redirects to /setup or /login as required.
- */
-function RootLayout() {
-  return (
-    <SetupGate>
-      <Outlet />
-    </SetupGate>
-  );
 }
 
 export const router = createBrowserRouter([

@@ -6,6 +6,7 @@ import { Modal, Input, Select, Button } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { useCategories, useCreateRule, useUpdateRule } from '@/hooks';
 import type { CategoryRule, MatchType } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z.object({
   pattern: z.string().min(1, 'Informe a palavra-chave'),
@@ -41,6 +42,8 @@ export function RuleFormModal({ open, onClose, rule }: Props) {
     control,
     watch,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -80,7 +83,10 @@ export function RuleFormModal({ open, onClose, rule }: Props) {
       priority: values.priority,
       active: values.active,
     };
-    const opts = { onSuccess: onClose };
+    const opts = {
+      onSuccess: onClose,
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
+    };
     if (isEdit && rule) update.mutate({ id: rule.id, payload }, opts);
     else create.mutate(payload, opts);
   };

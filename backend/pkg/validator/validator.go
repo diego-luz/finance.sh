@@ -3,12 +3,30 @@ package validator
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
 )
 
-var v = validator.New()
+var v = newValidator()
+
+// newValidator builds the shared validator and teaches it to report errors under
+// the field's JSON name. Without this, validator reports the Go struct field name
+// ("ClosingDay"), which does not match the wire contract ("closing_day") and so
+// cannot be matched to a form input by the SPA. Structs with no json tag keep the
+// lower-cased Go field name, which is the historical behaviour.
+func newValidator() *validator.Validate {
+	v := validator.New()
+	v.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+		if name == "" || name == "-" {
+			return strings.ToLower(fld.Name)
+		}
+		return name
+	})
+	return v
+}
 
 // BindJSON decodes the request body into dst and validates it using struct
 // tags. It returns a map of field->message on failure (empty map = ok).
@@ -19,12 +37,14 @@ func BindJSON(r *http.Request, dst interface{}) (map[string]string, error) {
 	return Validate(dst), nil
 }
 
-// Validate runs struct validation and returns field errors.
+// Validate runs struct validation and returns field errors keyed by the field's
+// JSON name (see newValidator), so the SPA can attach each message to the input
+// that produced it.
 func Validate(dst interface{}) map[string]string {
 	if err := v.Struct(dst); err != nil {
 		fields := map[string]string{}
 		for _, fe := range err.(validator.ValidationErrors) {
-			fields[strings.ToLower(fe.Field())] = message(fe)
+			fields[fe.Field()] = message(fe)
 		}
 		return fields
 	}
@@ -38,9 +58,9 @@ func message(fe validator.FieldError) string {
 	case "email":
 		return "E-mail inválido"
 	case "min":
-		return "Mínimo de " + fe.Param() + " caracteres"
+		return boundMessage("Mínimo", fe)
 	case "max":
-		return "Máximo de " + fe.Param() + " caracteres"
+		return boundMessage("Máximo", fe)
 	case "oneof":
 		return "Valor inválido"
 	case "eq":
@@ -50,5 +70,22 @@ func message(fe validator.FieldError) string {
 		return "Valor inválido"
 	default:
 		return "Valor inválido"
+	}
+}
+
+// boundMessage phrases a min/max violation according to what the bound actually
+// measures: the value itself for numbers, the length for strings, and the item
+// count for collections. Saying "caracteres" for a numeric field (e.g.
+// closing_day) misreports a value bound as a length bound.
+func boundMessage(prefix string, fe validator.FieldError) string {
+	switch fe.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return prefix + ": " + fe.Param()
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return prefix + " de " + fe.Param() + " itens"
+	default:
+		return prefix + " de " + fe.Param() + " caracteres"
 	}
 }

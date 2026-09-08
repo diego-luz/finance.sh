@@ -186,7 +186,9 @@ export function TransactionsPage() {
   const page = meta?.page ?? 1;
   const pages = meta?.pages ?? 1;
   const total = meta?.total ?? 0;
-  const transactions = data?.data ?? [];
+  // Memoised so the fallback `[]` does not produce a fresh array identity on
+  // every render, which would defeat the useMemo over `transactions` below.
+  const transactions = useMemo(() => data?.data ?? [], [data]);
 
   // Clear selection when the visible rows change (page / filter changes).
   useEffect(() => {

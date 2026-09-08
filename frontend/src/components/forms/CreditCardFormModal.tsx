@@ -6,6 +6,7 @@ import { Modal, Input, Button, ColorPicker } from '@/components/ui';
 import { useCreateCreditCard, useUpdateCreditCard } from '@/hooks';
 import { centsToInput, parseCurrencyToCents } from '@/lib/currency';
 import type { CreditCard } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const daySchema = z
   .string()
@@ -44,6 +45,8 @@ export function CreditCardFormModal({ open, onClose, creditCard }: Props) {
     handleSubmit,
     control,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -76,7 +79,10 @@ export function CreditCardFormModal({ open, onClose, creditCard }: Props) {
       due_day: Number(values.due_day),
       color: values.color,
     };
-    const opts = { onSuccess: onClose };
+    const opts = {
+      onSuccess: onClose,
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
+    };
     if (isEdit && creditCard) update.mutate({ id: creditCard.id, payload }, opts);
     else create.mutate(payload, opts);
   };

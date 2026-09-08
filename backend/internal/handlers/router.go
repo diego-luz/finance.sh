@@ -374,10 +374,12 @@ func NewRouter(d Deps) *chi.Mux {
 		})
 	})
 
-	// API docs: serve the raw spec and a Swagger UI page. Gated so they can be
-	// disabled in production (SWAGGER_ENABLED=false). The spec/UI are exposed when
-	// SWAGGER_ENABLED is true OR the environment is non-production.
-	if d.Config.SwaggerEnabled || !d.Config.IsProduction() {
+	// API docs: serve the raw spec and a Swagger UI page. Strictly opt-in via
+	// SWAGGER_ENABLED, and deliberately NOT tied to APP_ENV: the previous
+	// `|| !IsProduction()` meant SWAGGER_ENABLED=false silently did nothing
+	// unless the environment happened to be labelled production, so an instance
+	// that forgot to set APP_ENV published the full endpoint map of the API.
+	if d.Config.SwaggerEnabled {
 		r.Get("/openapi.yaml", func(w http.ResponseWriter, req *http.Request) {
 			w.Header().Set("Content-Type", "application/yaml")
 			http.ServeFile(w, req, filepath.Join(docsDir, "openapi.yaml"))

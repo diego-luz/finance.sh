@@ -6,6 +6,7 @@ import { Copy, Check, Mail } from 'lucide-react';
 import { Modal, Input, Select, Button } from '@/components/ui';
 import { useCreateInvitation } from '@/hooks';
 import type { Invitation, OrgRole } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z.object({
   email: z.string().min(1, 'Informe o e-mail').email('E-mail inválido'),
@@ -34,6 +35,8 @@ export function InviteMemberModal({ open, onClose }: Props) {
     register,
     handleSubmit,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -51,6 +54,7 @@ export function InviteMemberModal({ open, onClose }: Props) {
   const onSubmit = (values: FormValues) => {
     create.mutate(values, {
       onSuccess: (inv) => setCreated(inv),
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
     });
   };
 
