@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Modal, Input, Button, ColorPicker } from '@/components/ui';
 import { useCreateTag, useUpdateTag } from '@/hooks';
 import type { Tag } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z.object({
   name: z.string().min(1, 'Informe o nome da tag'),
@@ -31,6 +32,8 @@ export function TagFormModal({ open, onClose, tag, onSaved }: Props) {
     handleSubmit,
     control,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -52,6 +55,7 @@ export function TagFormModal({ open, onClose, tag, onSaved }: Props) {
         onSaved?.(saved);
         onClose();
       },
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
     };
     if (isEdit && tag) update.mutate({ id: tag.id, payload: values }, opts);
     else create.mutate(values, opts);

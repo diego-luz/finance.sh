@@ -35,6 +35,8 @@ func writeServiceError(w http.ResponseWriter, err error) bool {
 	switch {
 	case errors.Is(err, repositories.ErrNotFound), errors.Is(err, services.ErrNotFound):
 		response.Error(w, http.StatusNotFound, "not_found", "Registro não encontrado")
+	case errors.Is(err, services.ErrAccountHasTransactions):
+		response.Error(w, http.StatusConflict, "account_has_transactions", err.Error())
 	case errors.Is(err, repositories.ErrTagExists):
 		response.Error(w, http.StatusConflict, "tag_exists", err.Error())
 	case errors.Is(err, services.ErrAccountNotInOrg):

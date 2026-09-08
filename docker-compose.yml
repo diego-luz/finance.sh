@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-finance_sh}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-finance_sh}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set (run ./scripts/gen-env.sh)}
       POSTGRES_DB: ${DB_NAME:-finance_sh}
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -94,9 +94,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      APP_ENV: ${APP_ENV:-development}
+      APP_ENV: ${APP_ENV:-production}
       APP_PORT: "8080"
-      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
       # Public URL the app is reached at (used in emails/links). Set this to your
       # reverse-proxy hostname in production, e.g. https://finance.example.com.
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8090}
@@ -107,16 +107,18 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_ORG_NAME: ${ADMIN_ORG_NAME:-Minha Organização}
       # Field-level encryption of PII / 2FA secrets.
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set (run ./scripts/gen-env.sh)}
       # Inside the network the DB is reachable by service name.
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_USER: ${DB_USER:-finance_sh}
-      DB_PASSWORD: ${DB_PASSWORD:-finance_sh}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set (run ./scripts/gen-env.sh)}
       DB_NAME: ${DB_NAME:-finance_sh}
       DB_SSLMODE: ${DB_SSLMODE:-prefer}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret-change-me}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-change-me}
+      # Sem fallback: um segredo versionado aqui seria público. Vazio faz o app
+      # gerar um aleatório por boot (seguro, mas desloga a cada restart).
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
       JWT_ACCESS_TTL_MIN: ${JWT_ACCESS_TTL_MIN:-15}
       JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-7}
       LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}

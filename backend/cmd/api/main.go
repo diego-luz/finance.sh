@@ -5,6 +5,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"flag"
 	"fmt"
@@ -40,25 +42,11 @@ func main() {
 	cfg := config.Load()
 	log := logger.New(cfg.Env)
 
-	// Production secret guard: refuse to boot with insecure/default secrets. The
-	// dev defaults are safe in development but must never reach production.
-	if cfg.IsProduction() {
-		var insecure []string
-		if cfg.JWT.AccessSecret == "dev-access-secret-change-me" {
-			insecure = append(insecure, "JWT_ACCESS_SECRET")
-		}
-		if cfg.JWT.RefreshSecret == "dev-refresh-secret-change-me" {
-			insecure = append(insecure, "JWT_REFRESH_SECRET")
-		}
-		if cfg.EncryptionKey == "" || cfg.EncryptionKey == crypto.DevDefaultKey {
-			insecure = append(insecure, "ENCRYPTION_KEY")
-		}
-		if len(insecure) > 0 {
-			log.Error("refusing to start in production with insecure default secrets; set unique values",
-				"variables", insecure)
-			os.Exit(1)
-		}
-	}
+	// Secret guard. This runs on EVERY boot, not just when APP_ENV=production:
+	// a secret published in the repository is public no matter what the instance
+	// calls its environment, and APP_ENV is exactly the variable an operator
+	// forgets to change. See ensureSecrets.
+	ensureSecrets(cfg, log)
 
 	// Initialise field-level encryption (AES-256-GCM). A malformed key is fatal;
 	// the dev default logs a WARNING from within pkg/crypto.
@@ -173,7 +161,7 @@ func main() {
 	// Services.
 	authSvc := services.NewAuthService(userRepo, passwordResetRepo, cfg, loginLimiter, mail, db)
 	lgpdSvc := services.NewLGPDService(db, userRepo)
-	accountSvc := services.NewAccountService(accountRepo, dashCache)
+	accountSvc := services.NewAccountService(accountRepo, txRepo, dashCache)
 	categorySvc := services.NewCategoryService(categoryRepo, dashCache)
 	contactSvc := services.NewContactService(contactRepo)
 	tagSvc := services.NewTagService(tagRepo)
@@ -285,6 +273,64 @@ func main() {
 		log.Error("graceful shutdown failed", "error", err)
 	}
 	log.Info("server stopped")
+}
+
+// legacyDevJWTSecrets are the placeholders that used to ship in .env.example and
+// as built-in fallbacks. They are published in the repository, so anyone can mint
+// a valid token for an instance still using them. Treated as "unset".
+var legacyDevJWTSecrets = map[string]bool{
+	"":                             true,
+	"dev-access-secret-change-me":  true,
+	"dev-refresh-secret-change-me": true,
+}
+
+// ensureSecrets enforces the two rules that keep a fresh deploy from running on
+// secrets anyone can read in the repository:
+//
+//   - JWT secrets: an absent or published value is replaced by a random one
+//     generated for this process. Rotating a signing secret only invalidates
+//     existing sessions, so defaulting to "random" is always safer than
+//     defaulting to "public" — the cost is a logout, the warning says so.
+//   - ENCRYPTION_KEY: cannot be generated per boot, since it decrypts PII and 2FA
+//     secrets already stored in the database. An absent or published key is
+//     fatal. An instance that already wrote data under the published key can set
+//     ALLOW_INSECURE_ENCRYPTION_KEY=true to boot while it migrates.
+//
+// Unlike the previous guard, none of this is conditional on APP_ENV.
+func ensureSecrets(cfg *config.Config, log *slog.Logger) {
+	if legacyDevJWTSecrets[cfg.JWT.AccessSecret] {
+		cfg.JWT.AccessSecret = mustRandomSecret(log, "JWT_ACCESS_SECRET")
+		log.Warn("JWT_ACCESS_SECRET is unset or still the published placeholder; generated a random one for this process — existing sessions are invalid and will not survive a restart. Set it explicitly to keep sessions across restarts.")
+	}
+	if legacyDevJWTSecrets[cfg.JWT.RefreshSecret] {
+		cfg.JWT.RefreshSecret = mustRandomSecret(log, "JWT_REFRESH_SECRET")
+		log.Warn("JWT_REFRESH_SECRET is unset or still the published placeholder; generated a random one for this process — existing sessions are invalid and will not survive a restart. Set it explicitly to keep sessions across restarts.")
+	}
+
+	if cfg.EncryptionKey != "" && cfg.EncryptionKey != crypto.DevDefaultKey {
+		return
+	}
+	if os.Getenv("ALLOW_INSECURE_ENCRYPTION_KEY") == "true" {
+		log.Warn("ENCRYPTION_KEY is unset or the published development key, and ALLOW_INSECURE_ENCRYPTION_KEY=true — stored PII and 2FA secrets are readable by anyone with this repository. Rotate as soon as possible.")
+		return
+	}
+	log.Error("refusing to start: ENCRYPTION_KEY is unset or set to the development key published in this repository. " +
+		"It encrypts stored PII and 2FA secrets, so it must be unique per instance. " +
+		"Generate one with: openssl rand -base64 32 " +
+		"(an instance that already stored data under the published key may set ALLOW_INSECURE_ENCRYPTION_KEY=true to boot while migrating).")
+	os.Exit(1)
+}
+
+// mustRandomSecret returns a cryptographically random, base64-encoded 32-byte
+// secret. Failing to read the system RNG is unrecoverable: continuing would mean
+// signing tokens with a predictable key.
+func mustRandomSecret(log *slog.Logger, name string) string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		log.Error("failed to generate a random secret", "variable", name, "error", err)
+		os.Exit(1)
+	}
+	return base64.StdEncoding.EncodeToString(b)
 }
 
 // printAdminBanner writes the auto-generated first-boot admin credentials to

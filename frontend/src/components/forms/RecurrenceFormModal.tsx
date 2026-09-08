@@ -16,6 +16,7 @@ import { centsToInput, parseCurrencyToCents } from '@/lib/currency';
 import { toInputDate, toISODate } from '@/lib/date';
 import { summarizeSchedule } from '@/lib/recurrence';
 import type { RecurrenceFrequency, RecurrenceRule, RecurrenceType } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z
   .object({
@@ -72,6 +73,8 @@ export function RecurrenceFormModal({ open, onClose, recurrence }: Props) {
     control,
     watch,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -140,7 +143,10 @@ export function RecurrenceFormModal({ open, onClose, recurrence }: Props) {
       paid: values.paid,
       active: values.active,
     };
-    const opts = { onSuccess: onClose };
+    const opts = {
+      onSuccess: onClose,
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
+    };
     if (isEdit && recurrence) update.mutate({ id: recurrence.id, payload }, opts);
     else create.mutate(payload, opts);
   };

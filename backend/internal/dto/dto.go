@@ -122,6 +122,10 @@ type AccountRequest struct {
 	InitialBalance int64  `json:"initial_balance"`
 	Color          string `json:"color" validate:"max=9"`
 	Icon           string `json:"icon" validate:"max=40"`
+	// Archived hides the account from day-to-day pickers without deleting it.
+	// This is the supported way to retire an account that still has entries,
+	// since deleting one would leave those entries without an account.
+	Archived bool `json:"archived"`
 }
 
 type AccountDTO struct {
@@ -588,10 +592,13 @@ type ForecastAlert struct {
 // ----- Credit Cards -----
 
 type CreditCardRequest struct {
-	Name       string `json:"name" validate:"required,max=120"`
-	Limit      int64  `json:"limit" validate:"gte=0"`
-	ClosingDay int    `json:"closing_day" validate:"required,min=1,max=28"`
-	DueDay     int    `json:"due_day" validate:"required,min=1,max=28"`
+	Name  string `json:"name" validate:"required,max=120"`
+	Limit int64  `json:"limit" validate:"gte=0"`
+	// ClosingDay/DueDay accept 1..31. Days that do not exist in a given month
+	// are clamped to that month's last day by internal/cards (e.g. a card that
+	// closes on the 31st closes on the 28th/29th in February).
+	ClosingDay int    `json:"closing_day" validate:"required,min=1,max=31"`
+	DueDay     int    `json:"due_day" validate:"required,min=1,max=31"`
 	Color      string `json:"color" validate:"max=9"`
 }
 

@@ -6,6 +6,7 @@ import { Modal, Input, Select, Button } from '@/components/ui';
 import { useCategories, useCreateBudget, useUpdateBudget } from '@/hooks';
 import { centsToInput, parseCurrencyToCents } from '@/lib/currency';
 import type { Budget } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z.object({
   category_id: z.string().min(1, 'Selecione uma categoria'),
@@ -38,6 +39,8 @@ export function BudgetFormModal({ open, onClose, budget, month, year }: Props) {
     register,
     handleSubmit,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -60,7 +63,10 @@ export function BudgetFormModal({ open, onClose, budget, month, year }: Props) {
       month,
       year,
     };
-    const opts = { onSuccess: onClose };
+    const opts = {
+      onSuccess: onClose,
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
+    };
     if (isEdit && budget) update.mutate({ id: budget.id, payload }, opts);
     else create.mutate(payload, opts);
   };

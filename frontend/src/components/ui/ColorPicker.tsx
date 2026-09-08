@@ -1,24 +1,6 @@
 import { Check } from 'lucide-react';
 import { cn } from '@/lib/cn';
-
-export const PALETTE = [
-  '#10b981',
-  '#059669',
-  '#0ea5e9',
-  '#3b82f6',
-  '#6366f1',
-  '#8b5cf6',
-  '#a855f7',
-  '#ec4899',
-  '#f43f5e',
-  '#ef4444',
-  '#f97316',
-  '#f59e0b',
-  '#eab308',
-  '#84cc16',
-  '#14b8a6',
-  '#64748b',
-];
+import { PALETTE } from './palette';
 
 interface ColorPickerProps {
   label?: string;

@@ -10,7 +10,7 @@ DB_NAME ?= finance_sh
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down restart logs ps build seed db-shell \
+.PHONY: help env up down restart logs ps build seed db-shell \
         backend-dev frontend-dev backend-build frontend-build \
         tidy lint test swagger clean fresh backup restore \
 
@@ -18,6 +18,10 @@ help: ## Show this help
 	@echo "finance.sh — make targets:"
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
+
+# ---- Setup ------------------------------------------------------------------
+env: ## Create .env with secrets generated for this installation
+	./scripts/gen-env.sh
 
 # ---- Stack lifecycle (Docker Compose) --------------------------------------
 up: ## Start the whole stack in the background

@@ -454,6 +454,18 @@ func (r *TransactionRepository) CountAll(orgID uuid.UUID) (int64, error) {
 	return n, err
 }
 
+// CountByAccount returns how many live transactions depend on the account,
+// counting both the owning side (account_id) and the counterpart of a transfer
+// (transfer_account_id). Used to refuse deleting an account that still backs
+// entries — a transaction has no meaning without its account.
+func (r *TransactionRepository) CountByAccount(orgID, accountID uuid.UUID) (int64, error) {
+	var n int64
+	err := r.db.Model(&entities.Transaction{}).
+		Where("organization_id = ? AND (account_id = ? OR transfer_account_id = ?)", orgID, accountID, accountID).
+		Count(&n).Error
+	return n, err
+}
+
 // ----- Bulk operations (org-scoped) -----
 //
 // Every bulk method runs a single UPDATE/DELETE whose WHERE clause is scoped by

@@ -75,7 +75,7 @@ O projeto é 100% open-source (AGPL-3.0) — não há edição paga. Features en
 ```bash
 git clone https://github.com/finance-sh/finance-sh
 cd finance-sh
-cp .env.example .env          # defaults dev funcionam de cara
+./scripts/gen-env.sh          # gera .env com segredos próprios (não há default)
 docker compose up -d --build
 ```
 
@@ -84,18 +84,18 @@ Acesse:
 | Serviço | URL |
 |---|---|
 | App (SPA + API via Nginx) | http://localhost:8090 |
-| Swagger (dev) | http://localhost:8090/swagger/index.html |
+| Swagger (opt-in: `SWAGGER_ENABLED=true`) | http://localhost:8090/swagger |
 | Postgres (cliente local) | `127.0.0.1:5433` (use `docker exec finance-sh-postgres psql` ou DBeaver/TablePlus) |
 | Landing (dev) | `cd landing && npm run dev` → http://localhost:5174 (deploy externo; fora do compose) |
 
-Usuário demo (SEED=true): `demo@finance.sh` / `demo1234`. Super-admin: `super@finance.sh` / `super1234`. Troque ambos no primeiro login.
+Usuário demo (SEED=true): `demo@finance.sh` / `senha123`. Super-admin: `super@finance.sh` / `superadmin123`. Troque ambos no primeiro login.
 
 ### Dev sem Docker (loop rápido backend)
 
 ```bash
 docker compose up -d postgres                   # única dependência
 cd backend
-cp .env.example .env                            # ajustar DB_HOST=localhost, DB_PORT=5433
+# usa o .env da raiz; ajuste DB_HOST=localhost e DB_PORT=5433 para sair do compose
 go run ./cmd/api                                # roda em :8090
 ```
 
