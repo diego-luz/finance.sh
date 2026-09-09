@@ -6,6 +6,7 @@ import { Modal, Input, Button, ColorPicker, IconPicker } from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { useCreateCategory, useUpdateCategory } from '@/hooks';
 import type { Category, CategoryKind } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z.object({
   name: z.string().min(1, 'Informe o nome da categoria'),
@@ -32,6 +33,8 @@ export function CategoryFormModal({ open, onClose, category }: Props) {
     handleSubmit,
     control,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -50,7 +53,10 @@ export function CategoryFormModal({ open, onClose, category }: Props) {
   }, [open, category, reset]);
 
   const onSubmit = (values: FormValues) => {
-    const opts = { onSuccess: onClose };
+    const opts = {
+      onSuccess: onClose,
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
+    };
     if (isEdit && category) update.mutate({ id: category.id, payload: values }, opts);
     else create.mutate(values, opts);
   };

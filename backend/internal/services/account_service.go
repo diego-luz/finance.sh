@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/finance-sh/finance-sh/internal/dto"
 	"github.com/finance-sh/finance-sh/internal/entities"
@@ -14,13 +15,26 @@ import (
 // ErrNotFound is the service-level not-found signal (re-exported for handlers).
 var ErrNotFound = repositories.ErrNotFound
 
+// ErrAccountHasTransactions is returned when deleting an account that still
+// backs transactions. A transaction's account is mandatory, so removing the
+// account would leave entries pointing at nothing — the ledger equivalent of a
+// dangling pointer. Retiring such an account is done by archiving it.
+var ErrAccountHasTransactions = errors.New("conta com lançamentos não pode ser excluída")
+
 type AccountService struct {
 	accounts *repositories.AccountRepository
-	cache    *cache.Cache
+	// txs is read-only here: it answers "does anything still depend on this
+	// account?" before a delete.
+	txs   *repositories.TransactionRepository
+	cache *cache.Cache
 }
 
-func NewAccountService(accounts *repositories.AccountRepository, c *cache.Cache) *AccountService {
-	return &AccountService{accounts: accounts, cache: c}
+func NewAccountService(
+	accounts *repositories.AccountRepository,
+	txs *repositories.TransactionRepository,
+	c *cache.Cache,
+) *AccountService {
+	return &AccountService{accounts: accounts, txs: txs, cache: c}
 }
 
 // invalidateDashboard drops the org's cached dashboard after a mutation that
@@ -67,6 +81,7 @@ func (s *AccountService) Create(orgID uuid.UUID, req dto.AccountRequest) (*dto.A
 		InitialBalance: req.InitialBalance,
 		Color:          defaultStr(req.Color, "#10b981"),
 		Icon:           defaultStr(req.Icon, "wallet"),
+		Archived:       req.Archived,
 	}
 	if err := s.accounts.Create(a); err != nil {
 		return nil, err
@@ -90,6 +105,7 @@ func (s *AccountService) Update(orgID, id uuid.UUID, req dto.AccountRequest) (*d
 	if req.Icon != "" {
 		a.Icon = req.Icon
 	}
+	a.Archived = req.Archived
 	if err := s.accounts.Update(a); err != nil {
 		return nil, err
 	}
@@ -103,6 +119,17 @@ func (s *AccountService) Update(orgID, id uuid.UUID, req dto.AccountRequest) (*d
 }
 
 func (s *AccountService) Delete(orgID, id uuid.UUID) error {
+	// Refuse to break the ledger: an account that still backs entries can only be
+	// archived, never deleted. The database enforces the same rule via
+	// fk_transactions_account, but failing here gives the user an explanation
+	// instead of a constraint violation.
+	n, err := s.txs.CountByAccount(orgID, id)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		return fmt.Errorf("%w: há %d lançamento(s) vinculado(s). Arquive a conta em vez de excluí-la", ErrAccountHasTransactions, n)
+	}
 	if err := s.accounts.Delete(orgID, id); err != nil {
 		return err
 	}

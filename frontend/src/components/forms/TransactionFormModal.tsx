@@ -19,6 +19,7 @@ import { categorizationService } from '@/services';
 import { centsToInput, formatCurrency, parseCurrencyToCents } from '@/lib/currency';
 import { toInputDate, toISODate } from '@/lib/date';
 import type { Transaction, TransactionType } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z
   .object({
@@ -74,6 +75,8 @@ export function TransactionFormModal({ open, onClose, transaction }: Props) {
     watch,
     reset,
     setValue,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -209,7 +212,10 @@ export function TransactionFormModal({ open, onClose, transaction }: Props) {
           : undefined,
       tag_ids: values.tag_ids,
     };
-    const opts = { onSuccess: onClose };
+    const opts = {
+      onSuccess: onClose,
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
+    };
     if (isEdit && transaction) update.mutate({ id: transaction.id, payload }, opts);
     else create.mutate(payload, opts);
   };

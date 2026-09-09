@@ -630,9 +630,20 @@ paths:
     delete:
       tags: [Accounts]
       summary: Remove conta
+      description: >
+        Só remove uma conta sem lançamentos vinculados. Uma conta que ainda
+        lastreia lançamentos responde 409: excluí-la deixaria esses lançamentos
+        sem conta. Para aposentá-la, use PUT com archived=true.
       responses:
         '204': { description: Removida }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >
+            A conta possui lançamentos vinculados (código account_has_transactions).
+            Arquive-a em vez de excluir.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
 
   /categories:
     get:
@@ -2834,6 +2845,12 @@ components:
         initial_balance: { type: integer, format: int64, description: Saldo inicial em centavos }
         color: { type: string }
         icon: { type: string }
+        archived:
+          type: boolean
+          description: >
+            Arquiva a conta: ela sai das seleções do dia a dia mas mantém o
+            histórico. É a forma de aposentar uma conta com lançamentos, já que
+            DELETE nesse caso responde 409 (deixaria lançamentos sem conta).
     Account:
       type: object
       properties:
@@ -3155,8 +3172,8 @@ components:
       properties:
         name: { type: string, maxLength: 120 }
         limit: { type: integer, format: int64, description: Limite em centavos }
-        closing_day: { type: integer, minimum: 1, maximum: 28 }
-        due_day: { type: integer, minimum: 1, maximum: 28 }
+        closing_day: { type: integer, minimum: 1, maximum: 31, description: "Dias inexistentes no mês são ajustados para o último dia (ex.: 31 fecha em 28/29 de fevereiro)" }
+        due_day: { type: integer, minimum: 1, maximum: 31, description: "Dias inexistentes no mês são ajustados para o último dia" }
         color: { type: string }
     CreditCard:
       type: object

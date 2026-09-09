@@ -39,10 +39,6 @@ export function LoginPage() {
   // Fail-open: treat undefined / errored response as registration being open.
   const [mfaToken, setMfaToken] = useState<string | null>(null);
 
-  if (setupStatus?.needs_setup === true) {
-    return <Navigate to="/setup" replace />;
-  }
-
   const {
     register,
     handleSubmit,
@@ -54,6 +50,14 @@ export function LoginPage() {
     handleSubmit: handleSubmitCode,
     formState: { errors: codeErrors },
   } = useForm<CodeValues>({ resolver: zodResolver(codeSchema) });
+
+  // Redirect AFTER every hook has run. setupStatus arrives asynchronously, so an
+  // early return above the useForm calls would render this component with two
+  // hooks on the first pass and none on the next, which React rejects with
+  // "Rendered fewer hooks than expected".
+  if (setupStatus?.needs_setup === true) {
+    return <Navigate to="/setup" replace />;
+  }
 
   const onSubmit = (values: LoginValues) =>
     login.mutate(values, {

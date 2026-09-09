@@ -126,17 +126,29 @@ func (r *Runner) PurgeSoftDeleted() error {
 	}
 
 	var total int64
+	var failed []string
 	for _, t := range tables {
 		res := r.db.Unscoped().
 			Where("deleted_at IS NOT NULL AND deleted_at < ?", cutoff).
 			Delete(t.model)
 		if res.Error != nil {
-			return res.Error
+			// Keep purging the remaining tables. A row can legitimately refuse to
+			// go — e.g. an account still referenced by live transactions, which
+			// fk_transactions_account rejects — and one stuck table must not stop
+			// the retention job from clearing every other one.
+			r.log.Error("worker: purge failed for table", "table", t.name, "error", res.Error)
+			failed = append(failed, t.name)
+			continue
 		}
 		if res.RowsAffected > 0 {
 			total += res.RowsAffected
 			r.log.Info("worker: purged soft-deleted rows", "table", t.name, "rows", res.RowsAffected)
 		}
+	}
+	if len(failed) > 0 {
+		r.log.Warn("worker: retention purge finished with tables skipped",
+			"retention_days", r.retentionDays, "total_rows", total, "skipped", failed)
+		return nil
 	}
 	r.log.Info("worker: retention purge complete", "retention_days", r.retentionDays, "total_rows", total)
 	return nil

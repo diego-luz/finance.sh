@@ -111,16 +111,23 @@ func Load() *Config {
 			SSLMode:  getenv("DB_SSLMODE", "disable"),
 		},
 		JWT: JWTConfig{
-			AccessSecret:  getenv("JWT_ACCESS_SECRET", "dev-access-secret-change-me"),
-			RefreshSecret: getenv("JWT_REFRESH_SECRET", "dev-refresh-secret-change-me"),
+			// No built-in fallback on purpose: a secret shipped in the repository is
+			// a public secret. When these are empty (or still hold the old dev
+			// placeholders) main generates random ones at boot — see ensureSecrets.
+			AccessSecret:  getenv("JWT_ACCESS_SECRET", ""),
+			RefreshSecret: getenv("JWT_REFRESH_SECRET", ""),
 			AccessTTL:     time.Duration(getenvInt("JWT_ACCESS_TTL_MIN", 15)) * time.Minute,
 			RefreshTTL:    time.Duration(getenvInt("JWT_REFRESH_TTL_DAYS", 7)) * 24 * time.Hour,
 		},
 		CORSOrigins:  []string{getenv("CORS_ORIGINS", "http://localhost:5173")},
 		RateLimitRPM: getenvInt("RATE_LIMIT_RPM", 120),
 
-		SwaggerEnabled: getenvBool("SWAGGER_ENABLED", true),
-		// Dev default is a fixed test key; pkg/crypto logs a WARNING when it is used.
+		// Off by default: the spec and UI describe every endpoint of the instance,
+		// so exposing them is an opt-in, not something a fresh deploy inherits.
+		SwaggerEnabled: getenvBool("SWAGGER_ENABLED", false),
+		// Must be supplied by the operator: it decrypts stored PII and 2FA secrets,
+		// so it can neither be shipped nor generated per boot. main refuses to
+		// start without it.
 		EncryptionKey:    getenv("ENCRYPTION_KEY", ""),
 		FrontendURL:      getenv("FRONTEND_URL", "http://localhost:8090"),
 		RetentionDays:    getenvInt("RETENTION_DAYS", 90),
