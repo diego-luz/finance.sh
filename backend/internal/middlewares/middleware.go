@@ -281,10 +281,11 @@ func CORS(cfg *config.Config) func(http.Handler) http.Handler {
 	})
 }
 
-// securityCSP is the Content-Security-Policy for the SPA: scripts/connect
-// restricted to same-origin, inline styles allowed for Vite + Google Fonts,
-// no framing.
-const securityCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+// securityCSP is the Content-Security-Policy for the SPA. Everything the page
+// loads comes from this instance: fonts are bundled (@fontsource) rather than
+// fetched from fonts.gstatic.com, so style-src and font-src no longer need to
+// allow Google. 'unsafe-inline' remains for the styles Vite inlines. No framing.
+const securityCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 
 // SecurityHeaders sets the baseline response security headers. The static
 // headers are safe on every response (API JSON included); CSP is skipped for the
