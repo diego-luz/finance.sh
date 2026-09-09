@@ -61,18 +61,9 @@ export default defineConfig({
             method: 'GET',
             options: { cacheName: 'api-no-cache' },
           },
-          {
-            // Google Fonts stylesheets + font files: safe to cache long-term.
-            urlPattern: ({ url }) =>
-              url.origin === 'https://fonts.googleapis.com' ||
-              url.origin === 'https://fonts.gstatic.com',
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts',
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
+          // Não há regra para fontes de terceiros: elas são auto-hospedadas
+          // (@fontsource, importadas em src/main.tsx) e entram no precache do
+          // build junto com os demais assets, como qualquer arquivo da instância.
         ],
       },
       devOptions: { enabled: false },

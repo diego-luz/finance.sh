@@ -17,7 +17,7 @@
 
 ```bash
 git clone https://github.com/finance-sh/finance-sh && cd finance-sh
-cp .env.example .env
+./scripts/gen-env.sh          # gera .env com segredos desta instalação
 docker compose up -d
 # → http://localhost:8090
 ```
@@ -300,12 +300,21 @@ finance-sh/
 # 1. Clone
 git clone https://github.com/finance-sh/finance-sh && cd finance-sh
 
-# 2. Crie o .env (defaults de dev funcionam de cara)
-cp .env.example .env
+# 2. Crie o .env com segredos gerados para ESTA instalação
+./scripts/gen-env.sh          # (ou: make env)
 
 # 3. Suba a stack inteira
 docker compose up -d --build
 ```
+
+> **Por que um script e não `cp .env.example .env`:** o repositório não versiona
+> nenhum segredo que funcione — um valor commitado aqui é um valor que todo
+> mundo que leu o projeto já tem. O script gera `ENCRYPTION_KEY`,
+> `DB_PASSWORD` e os segredos de JWT na hora. O app recusa subir sem
+> `ENCRYPTION_KEY` própria, **em qualquer ambiente** — não só quando
+> `APP_ENV=production`, porque essa é justamente a variável que se esquece de
+> trocar. Guarde a `ENCRYPTION_KEY` num cofre: sem ela os campos criptografados
+> ficam ilegíveis.
 
 Após subir (~1 min no primeiro build), **2 containers** default ficam ativos:
 

@@ -7,6 +7,7 @@ import { useCreateGoal, useUpdateGoal } from '@/hooks';
 import { centsToInput, parseCurrencyToCents } from '@/lib/currency';
 import { toInputDate, toISODate } from '@/lib/date';
 import type { Goal } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z.object({
   name: z.string().min(1, 'Informe o nome da meta'),
@@ -34,6 +35,8 @@ export function GoalFormModal({ open, onClose, goal }: Props) {
     handleSubmit,
     control,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -66,7 +69,10 @@ export function GoalFormModal({ open, onClose, goal }: Props) {
       deadline: values.deadline ? toISODate(values.deadline) : undefined,
       color: values.color,
     };
-    const opts = { onSuccess: onClose };
+    const opts = {
+      onSuccess: onClose,
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
+    };
     if (isEdit && goal) update.mutate({ id: goal.id, payload }, opts);
     else create.mutate(payload, opts);
   };

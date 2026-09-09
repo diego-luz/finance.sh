@@ -6,6 +6,7 @@ import { Modal, Input, Select, Button, ColorPicker, IconPicker } from '@/compone
 import { useCreateAccount, useUpdateAccount } from '@/hooks';
 import { centsToInput, parseCurrencyToCents } from '@/lib/currency';
 import type { Account, AccountType } from '@/types';
+import { applyApiFieldErrors } from '@/lib/formErrors';
 
 const schema = z.object({
   name: z.string().min(1, 'Informe o nome da conta'),
@@ -13,6 +14,7 @@ const schema = z.object({
   initial_balance: z.string(),
   color: z.string().min(1),
   icon: z.string().min(1),
+  archived: z.boolean(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -40,6 +42,8 @@ export function AccountFormModal({ open, onClose, account }: Props) {
     handleSubmit,
     control,
     reset,
+    setError,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -49,6 +53,7 @@ export function AccountFormModal({ open, onClose, account }: Props) {
       initial_balance: '',
       color: '#10b981',
       icon: 'landmark',
+      archived: false,
     },
   });
 
@@ -60,6 +65,7 @@ export function AccountFormModal({ open, onClose, account }: Props) {
         initial_balance: account ? centsToInput(account.initial_balance) : '',
         color: account?.color ?? '#10b981',
         icon: account?.icon ?? 'landmark',
+        archived: account?.archived ?? false,
       });
     }
   }, [open, account, reset]);
@@ -71,8 +77,12 @@ export function AccountFormModal({ open, onClose, account }: Props) {
       initial_balance: parseCurrencyToCents(values.initial_balance),
       color: values.color,
       icon: values.icon,
+      archived: values.archived,
     };
-    const opts = { onSuccess: onClose };
+    const opts = {
+      onSuccess: onClose,
+      onError: (err: unknown) => applyApiFieldErrors(err, { setError, getValues }),
+    };
     if (isEdit && account) update.mutate({ id: account.id, payload }, opts);
     else create.mutate(payload, opts);
   };
@@ -130,6 +140,24 @@ export function AccountFormModal({ open, onClose, account }: Props) {
             <IconPicker label="Ícone" value={field.value} onChange={field.onChange} />
           )}
         />
+
+        {isEdit && (
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 p-3.5 dark:border-gray-700">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              {...register('archived')}
+            />
+            <span className="text-sm">
+              <span className="font-medium text-gray-700 dark:text-gray-200">Arquivar conta</span>
+              <span className="mt-0.5 block text-gray-500 dark:text-gray-400">
+                Some das seleções do dia a dia, mas mantém o histórico. É a forma
+                de aposentar uma conta que já tem lançamentos — excluí-la deixaria
+                os lançamentos sem conta.
+              </span>
+            </span>
+          </label>
+        )}
       </form>
     </Modal>
   );
