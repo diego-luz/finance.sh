@@ -41,6 +41,9 @@ var (
 	ErrAccountLocked      = errors.New("conta temporariamente bloqueada por excesso de tentativas")
 	ErrInvalidCode        = errors.New("código de verificação inválido")
 	Err2FANotPending      = errors.New("configure o 2FA antes de ativá-lo")
+	// Err2FAAlreadyEnabled is returned by SetupTwoFactor when 2FA is on: a new
+	// secret would switch it off without the code that /me/2fa/disable demands.
+	Err2FAAlreadyEnabled = errors.New("o 2FA já está ativo; desative-o com um código antes de configurar de novo")
 	// ErrAccountDisabled is returned at login when a platform super-admin has
 	// disabled the user's account. Maps to 403.
 	ErrAccountDisabled = errors.New("Conta desativada. Contate o administrador.")
@@ -524,6 +527,12 @@ func (s *AuthService) SetupTwoFactor(userID uuid.UUID) (*dto.TwoFactorSetupRespo
 	user, err := s.users.FindByID(userID)
 	if err != nil {
 		return nil, ErrUserNotFound
+	}
+	// Re-running setup replaces the secret and turns 2FA off, so with a stolen
+	// access token alone it would strip the victim's second factor. Turning it
+	// off goes through DisableTwoFactor, which asks for a valid code.
+	if user.TwoFactorEnabled {
+		return nil, Err2FAAlreadyEnabled
 	}
 	secret, url, err := totp.Generate("finance.sh", user.Email)
 	if err != nil {
