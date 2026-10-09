@@ -9,6 +9,7 @@ import (
 	"github.com/finance-sh/finance-sh/internal/entities"
 	"github.com/finance-sh/finance-sh/internal/repositories"
 	"github.com/finance-sh/finance-sh/pkg/hash"
+	"github.com/finance-sh/finance-sh/pkg/lockout"
 	"github.com/finance-sh/finance-sh/pkg/logger"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -26,12 +27,13 @@ var (
 // LGPDService implements the data-subject rights endpoints (export + deletion)
 // required by the LGPD: the right to data portability and the right to erasure.
 type LGPDService struct {
-	db    *gorm.DB
-	users *repositories.UserRepository
+	db      *gorm.DB
+	users   *repositories.UserRepository
+	lockout *lockout.Limiter
 }
 
-func NewLGPDService(db *gorm.DB, users *repositories.UserRepository) *LGPDService {
-	return &LGPDService{db: db, users: users}
+func NewLGPDService(db *gorm.DB, users *repositories.UserRepository, lim *lockout.Limiter) *LGPDService {
+	return &LGPDService{db: db, users: users, lockout: lim}
 }
 
 // ExportData assembles the full data set the user can access across every
@@ -154,8 +156,8 @@ func (s *LGPDService) DeleteAccount(userID uuid.UUID, password string) error {
 	if err != nil {
 		return ErrUserNotFound
 	}
-	if !hash.Check(user.PasswordHash, password) {
-		return ErrWrongPassword
+	if err := checkPasswordLimited(s.lockout, user, password); err != nil {
+		return err
 	}
 
 	memberships, err := s.users.Memberships(userID)

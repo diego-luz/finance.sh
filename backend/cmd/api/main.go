@@ -168,7 +168,7 @@ func main() {
 
 	// Services.
 	authSvc := services.NewAuthService(userRepo, passwordResetRepo, cfg, loginLimiter, mail, db)
-	lgpdSvc := services.NewLGPDService(db, userRepo)
+	lgpdSvc := services.NewLGPDService(db, userRepo, loginLimiter)
 	accountSvc := services.NewAccountService(accountRepo, txRepo, dashCache)
 	categorySvc := services.NewCategoryService(categoryRepo, dashCache)
 	contactSvc := services.NewContactService(contactRepo)

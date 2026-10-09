@@ -198,6 +198,8 @@ func (h *MeHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, services.ErrWrongPassword):
 			response.Error(w, http.StatusUnauthorized, "wrong_password", "Senha atual incorreta")
+		case errors.Is(err, services.ErrAccountLocked):
+			response.Error(w, http.StatusLocked, "account_locked", err.Error())
 		case errors.Is(err, services.ErrUserNotFound):
 			response.Error(w, http.StatusNotFound, "not_found", "Usuário não encontrado")
 		default:
@@ -220,6 +222,8 @@ func (h *MeHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, services.ErrWrongPassword):
 			response.Error(w, http.StatusUnauthorized, "wrong_password", "Senha incorreta")
+		case errors.Is(err, services.ErrAccountLocked):
+			response.Error(w, http.StatusLocked, "account_locked", err.Error())
 		case errors.Is(err, services.ErrOwnedOrgHasMembers):
 			response.Error(w, http.StatusConflict, "owned_org_has_members", err.Error())
 		case errors.Is(err, services.ErrUserNotFound):
