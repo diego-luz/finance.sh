@@ -73,3 +73,22 @@ func TestRecoveryCodes(t *testing.T) {
 		seen[c] = struct{}{}
 	}
 }
+
+func TestValidateStep(t *testing.T) {
+	secret, _, err := financetotp.Generate("finance.sh", "x@finance.sh")
+	require.NoError(t, err)
+	agora := time.Unix(1_800_000_015, 0) // 15 s into a step
+	passo := agora.Unix() / 30
+	for _, delta := range []int64{-1, 0, 1} {
+		code, err := totp.GenerateCode(secret, time.Unix((passo+delta)*30, 0))
+		require.NoError(t, err)
+		got, ok := financetotp.ValidateStep(code, secret, agora)
+		assert.True(t, ok, "delta %d", delta)
+		assert.Equal(t, passo+delta, got)
+	}
+	velho, _ := totp.GenerateCode(secret, time.Unix((passo-2)*30, 0))
+	_, ok := financetotp.ValidateStep(velho, secret, agora)
+	assert.False(t, ok, "two steps back is out of the window")
+	_, ok = financetotp.ValidateStep("12345", secret, agora)
+	assert.False(t, ok)
+}

@@ -25,12 +25,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-if [ -f "$ROOT_DIR/.env" ]; then
-    set -a
-    # shellcheck disable=SC1091
-    . "$ROOT_DIR/.env"
-    set +a
-fi
+# shellcheck source=scripts/env.sh
+. "$SCRIPT_DIR/env.sh"
+load_env "$ROOT_DIR/.env" DB_USER DB_NAME PG_CONTAINER APP_CONTAINER BACKUP_PASSPHRASE
 
 FILE="${1:-${FILE:-}}"
 if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
@@ -42,6 +39,7 @@ fi
 DB_USER="${DB_USER:-finance_sh}"
 DB_NAME="${DB_NAME:-finance_sh}"
 PG_CONTAINER="${PG_CONTAINER:-finance-sh-postgres}"
+APP_CONTAINER="${APP_CONTAINER:-finance-sh-app}"
 
 if [ -z "${BACKUP_PASSPHRASE:-}" ]; then
     echo "ERROR: BACKUP_PASSPHRASE is not set (needed to decrypt the dump)." >&2
@@ -53,10 +51,21 @@ printf "[restore] Type 'yes' to continue: "
 read -r CONFIRM
 [ "$CONFIRM" = "yes" ] || { echo "[restore] Aborted."; exit 1; }
 
+# The app keeps writing while the dump loads; stop it and start it again at
+# the end, whatever happens.
+if [ "$(docker inspect -f '{{.State.Running}}' "$APP_CONTAINER" 2>/dev/null || true)" = "true" ]; then
+    echo "[restore] Stopping '$APP_CONTAINER' during the restore..."
+    docker stop "$APP_CONTAINER" >/dev/null
+    trap 'echo "[restore] Starting '"'$APP_CONTAINER'"' again..."; docker start "$APP_CONTAINER" >/dev/null' EXIT
+fi
+
 echo "[restore] Decrypting $FILE and loading into '$DB_NAME'..."
 
-# gpg decrypt (host) -> psql (inside container).
-gpg --batch --yes --decrypt --passphrase "$BACKUP_PASSPHRASE" "$FILE" \
-  | docker exec -i "$PG_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME"
+# gpg decrypt (host) -> psql (inside container). Passphrase on fd 3, not in argv
+# (visible to other users in ps). One transaction that stops at the first
+# error: the dump starts with DROPs (--clean), so a failure halfway used to
+# leave tables dropped and still print "Done".
+gpg --batch --yes --pinentry-mode loopback --decrypt --passphrase-fd 3 "$FILE" 3<<<"$BACKUP_PASSPHRASE" \
+  | docker exec -i "$PG_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 --single-transaction -q
 
 echo "[restore] Done."

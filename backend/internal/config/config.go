@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -19,6 +20,14 @@ type Config struct {
 
 	CORSOrigins  []string
 	RateLimitRPM int
+	// AuthRateLimitRPM is a tighter per-IP budget for the public /auth and
+	// /setup routes (login, register, forgot-password...).
+	AuthRateLimitRPM int
+	// TrustedProxies are the peers (IPs or CIDRs) whose X-Forwarded-For and
+	// X-Real-IP are believed; empty means middlewares.DefaultTrustedProxies.
+	TrustedProxies []string
+	// SetupToken fixes the first-run setup code; empty = random per boot.
+	SetupToken string
 
 	SwaggerEnabled bool
 	EncryptionKey  string // base64-encoded 32 bytes for AES-256-GCM
@@ -92,6 +101,8 @@ type JWTConfig struct {
 	RefreshSecret string
 	AccessTTL     time.Duration
 	RefreshTTL    time.Duration
+	// SessionMaxAge caps a login session however often it is refreshed.
+	SessionMaxAge time.Duration
 }
 
 // Load reads configuration from the environment. A .env file is loaded when
@@ -118,9 +129,14 @@ func Load() *Config {
 			RefreshSecret: getenv("JWT_REFRESH_SECRET", ""),
 			AccessTTL:     time.Duration(getenvInt("JWT_ACCESS_TTL_MIN", 15)) * time.Minute,
 			RefreshTTL:    time.Duration(getenvInt("JWT_REFRESH_TTL_DAYS", 7)) * 24 * time.Hour,
+			SessionMaxAge: time.Duration(getenvInt("JWT_SESSION_MAX_DAYS", 30)) * 24 * time.Hour,
 		},
-		CORSOrigins:  []string{getenv("CORS_ORIGINS", "http://localhost:5173")},
-		RateLimitRPM: getenvInt("RATE_LIMIT_RPM", 120),
+		// a comma-separated list; taken whole it became one invalid origin
+		CORSOrigins:      splitList(getenv("CORS_ORIGINS", "http://localhost:5173")),
+		RateLimitRPM:     getenvInt("RATE_LIMIT_RPM", 120),
+		AuthRateLimitRPM: getenvInt("AUTH_RATE_LIMIT_RPM", 30),
+		TrustedProxies:   splitList(getenv("TRUSTED_PROXIES", "")),
+		SetupToken:       getenv("SETUP_TOKEN", ""),
 
 		// Off by default: the spec and UI describe every endpoint of the instance,
 		// so exposing them is an opt-in, not something a fresh deploy inherits.
@@ -173,6 +189,17 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// splitList splits a comma-separated variable, dropping blanks.
+func splitList(v string) []string {
+	var out []string
+	for _, item := range strings.Split(v, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func getenvInt(key string, fallback int) int {

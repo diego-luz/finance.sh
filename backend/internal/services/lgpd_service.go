@@ -9,6 +9,7 @@ import (
 	"github.com/finance-sh/finance-sh/internal/entities"
 	"github.com/finance-sh/finance-sh/internal/repositories"
 	"github.com/finance-sh/finance-sh/pkg/hash"
+	"github.com/finance-sh/finance-sh/pkg/lockout"
 	"github.com/finance-sh/finance-sh/pkg/logger"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -26,12 +27,13 @@ var (
 // LGPDService implements the data-subject rights endpoints (export + deletion)
 // required by the LGPD: the right to data portability and the right to erasure.
 type LGPDService struct {
-	db    *gorm.DB
-	users *repositories.UserRepository
+	db      *gorm.DB
+	users   *repositories.UserRepository
+	lockout *lockout.Limiter
 }
 
-func NewLGPDService(db *gorm.DB, users *repositories.UserRepository) *LGPDService {
-	return &LGPDService{db: db, users: users}
+func NewLGPDService(db *gorm.DB, users *repositories.UserRepository, lim *lockout.Limiter) *LGPDService {
+	return &LGPDService{db: db, users: users, lockout: lim}
 }
 
 // ExportData assembles the full data set the user can access across every
@@ -127,18 +129,20 @@ func (s *LGPDService) fetchTransactions(orgIDs []uuid.UUID) interface{} {
 			"id":              t.ID,
 			"organization_id": t.OrganizationID,
 			"account_id":      t.AccountID,
-			"category_id":     t.CategoryID,
-			"contact_id":      t.ContactID,
-			"type":            t.Type,
-			"amount":          t.Amount,
-			"description":     t.Description,
-			"date":            t.Date,
-			"due_date":        t.DueDate,
-			"paid":            t.Paid,
-			"paid_at":         t.PaidAt,
-			"recurring":       t.Recurring,
-			"notes":           t.Notes.String(),
-			"created_at":      t.CreatedAt,
+			// without it a restored transfer had no destination account
+			"transfer_account_id": t.TransferAccountID,
+			"category_id":         t.CategoryID,
+			"contact_id":          t.ContactID,
+			"type":                t.Type,
+			"amount":              t.Amount,
+			"description":         t.Description,
+			"date":                t.Date,
+			"due_date":            t.DueDate,
+			"paid":                t.Paid,
+			"paid_at":             t.PaidAt,
+			"recurring":           t.Recurring,
+			"notes":               t.Notes.String(),
+			"created_at":          t.CreatedAt,
 		})
 	}
 	return out
@@ -154,8 +158,8 @@ func (s *LGPDService) DeleteAccount(userID uuid.UUID, password string) error {
 	if err != nil {
 		return ErrUserNotFound
 	}
-	if !hash.Check(user.PasswordHash, password) {
-		return ErrWrongPassword
+	if err := checkPasswordLimited(s.lockout, user, password); err != nil {
+		return err
 	}
 
 	memberships, err := s.users.Memberships(userID)
@@ -193,7 +197,15 @@ func (s *LGPDService) DeleteAccount(userID uuid.UUID, password string) error {
 				}
 
 				// Soft-delete all financial data scoped to the org.
+				// Receipts are erased right away (Unscoped): they are personal
+				// data and the soft-deleted rows kept the bytes until the purge.
+				if err := tx.Unscoped().Where("organization_id = ?", orgID).Delete(&entities.Attachment{}).Error; err != nil {
+					return err
+				}
 				for _, model := range []interface{}{
+					&entities.RecurrenceRule{},
+					&entities.CategoryRule{},
+					&entities.Tag{},
 					&entities.Transaction{},
 					&entities.Budget{},
 					&entities.Goal{},

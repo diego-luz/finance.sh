@@ -54,6 +54,9 @@ func (h *SetupHandler) Initialize(w http.ResponseWriter, r *http.Request) {
 	res, err := h.setup.Initialize(req, services.AuthMeta{UserAgent: r.UserAgent(), IP: r.RemoteAddr})
 	if err != nil {
 		switch {
+		case errors.Is(err, services.ErrInvalidSetupToken):
+			response.Error(w, http.StatusForbidden, "invalid_setup_token",
+				"Código de instalação inválido. Ele aparece no log do servidor ao iniciar (docker compose logs app).")
 		case errors.Is(err, services.ErrAlreadyInitialized):
 			response.Error(w, http.StatusConflict, "already_initialized",
 				"A plataforma já foi inicializada.")

@@ -1,6 +1,10 @@
 package entities
 
-import "github.com/google/uuid"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Role defines the permission level of a user within an organization (RBAC).
 type Role string
@@ -44,8 +48,11 @@ type Invitation struct {
 	OrganizationID uuid.UUID `gorm:"type:uuid;not null;index" json:"organization_id"`
 	Email          string    `gorm:"not null;index" json:"email"`
 	Role           Role      `gorm:"type:varchar(20);default:'member'" json:"role"`
-	Token          string    `gorm:"uniqueIndex;not null" json:"-"`
-	Accepted       bool      `gorm:"default:false" json:"accepted"`
+	// Token holds the SHA-256 (hex) of the token in the invite link; the raw
+	// token is shown once, at creation.
+	Token     string     `gorm:"uniqueIndex;not null" json:"-"`
+	Accepted  bool       `gorm:"default:false" json:"accepted"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 func (Invitation) TableName() string { return "invitations" }

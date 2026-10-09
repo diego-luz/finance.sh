@@ -1,6 +1,9 @@
 package validator_test
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/finance-sh/finance-sh/pkg/validator"
@@ -115,4 +118,25 @@ func TestValidateValidStructReturnsNil(t *testing.T) {
 		Accept:   true,
 	}
 	assert.Nil(t, validator.Validate(in))
+}
+
+func TestBindJSONLimit(t *testing.T) {
+	type corpo struct {
+		Email string `json:"email"`
+	}
+	grande := `{"email":"` + strings.Repeat("a", validator.MaxJSONBody) + `"}`
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(grande))
+	var dst corpo
+	fields, err := validator.BindJSON(r, &dst)
+	assert.Error(t, err)
+	assert.Equal(t, "Corpo da requisição muito grande", fields["body"])
+
+	r = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(grande))
+	fields, err = validator.BindJSONLimit(r, &dst, 2*validator.MaxJSONBody)
+	assert.NoError(t, err)
+	assert.Empty(t, fields)
+
+	r = httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"email":`))
+	fields, _ = validator.BindJSON(r, &dst)
+	assert.Equal(t, "JSON inválido", fields["body"])
 }

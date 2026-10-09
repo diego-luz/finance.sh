@@ -48,16 +48,20 @@ DB_PASSWORD=$(password)
 
 # Fill each placeholder with its generated value; every other line is copied
 # through untouched, so comments and defaults stay as documented.
-awk -v enc="$ENCRYPTION_KEY" \
-    -v acc="$JWT_ACCESS_SECRET" \
-    -v ref="$JWT_REFRESH_SECRET" \
-    -v dbp="$DB_PASSWORD" '
-  /^ENCRYPTION_KEY=/     { print "ENCRYPTION_KEY=" enc;     next }
-  /^JWT_ACCESS_SECRET=/  { print "JWT_ACCESS_SECRET=" acc;  next }
-  /^JWT_REFRESH_SECRET=/ { print "JWT_REFRESH_SECRET=" ref; next }
-  /^DB_PASSWORD=/        { print "DB_PASSWORD=" dbp;        next }
-  { print }
-' "$EXAMPLE" > "$TARGET"
+# The secrets reach awk through the environment, not as -v arguments that any
+# local user could read in ps; and the file is born 0600 (umask), instead of
+# 0644 until the chmod below.
+export ENCRYPTION_KEY JWT_ACCESS_SECRET JWT_REFRESH_SECRET DB_PASSWORD
+(
+  umask 077
+  awk '
+    /^ENCRYPTION_KEY=/     { print "ENCRYPTION_KEY=" ENVIRON["ENCRYPTION_KEY"];         next }
+    /^JWT_ACCESS_SECRET=/  { print "JWT_ACCESS_SECRET=" ENVIRON["JWT_ACCESS_SECRET"];   next }
+    /^JWT_REFRESH_SECRET=/ { print "JWT_REFRESH_SECRET=" ENVIRON["JWT_REFRESH_SECRET"]; next }
+    /^DB_PASSWORD=/        { print "DB_PASSWORD=" ENVIRON["DB_PASSWORD"];               next }
+    { print }
+  ' "$EXAMPLE" > "$TARGET"
+)
 
 chmod 600 "$TARGET"
 

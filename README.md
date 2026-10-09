@@ -4,7 +4,7 @@
 
 **Controle financeiro open-source, self-hosted, em pt-BR.**
 
-[![Go](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
@@ -240,7 +240,7 @@ Detalhes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Camada | Tecnologias |
 |---|---|
-| **Backend** | Go 1.22 · [chi](https://github.com/go-chi/chi) · [GORM](https://gorm.io) · PostgreSQL 16 · JWT (golang-jwt) · bcrypt · golang-migrate · pquerna/otp (2FA) · excelize + go-pdf/fpdf (export) · `golang.org/x/time/rate` (rate limit in-memory) · scheduler goroutine in-process |
+| **Backend** | Go 1.25+ · [chi](https://github.com/go-chi/chi) · [GORM](https://gorm.io) · PostgreSQL 16 · JWT (golang-jwt) · bcrypt · golang-migrate · pquerna/otp (2FA) · excelize + go-pdf/fpdf (export) · httprate (rate limit in-memory) · scheduler goroutine in-process |
 | **Frontend** | React 18 · TypeScript · Vite 6 · Tailwind CSS · React Query (TanStack) · Zustand · Axios · Recharts · React Router · React Hook Form + Zod · react-i18next · vite-plugin-pwa |
 | **Infra** | Docker · Docker Compose · SPA embutida no binário Go (`go:embed`, multi-stage build) · traga seu reverse proxy p/ TLS · GitHub Actions (CI + scans Trivy/gosec/govulncheck/gitleaks) |
 
@@ -335,7 +335,7 @@ URLs (portas de host deslocadas pra não conflitar):
 | Swagger UI | http://127.0.0.1:8090/swagger | Só em dev (mesma porta da app). |
 | PostgreSQL | `127.0.0.1:5433` | Loopback only. |
 
-Pra popular dados de demonstração, mantenha `SEED=true` no `.env` (já é o padrão) ou rode `make seed`.
+Pra popular dados de demonstração, ponha `SEED=true` e `APP_ENV=development` no `.env` ou rode `make seed` (o padrão é `SEED=false`). Com `APP_ENV=production` o app se recusa a subir com `SEED=true`, porque as contas de demonstração têm senhas públicas.
 
 ---
 
@@ -357,11 +357,19 @@ Vite (`5173`) faz proxy de `/api` pra `http://localhost:8090`. Postgres em `5433
 
 No **primeiro acesso com banco vazio**, a app mostra o **setup wizard**: um formulário onde **você cria** o primeiro super-admin (nome, e-mail, senha) e a organização. Nenhum segredo é exibido — você define a senha. É o padrão (`BOOTSTRAP_ADMIN=false`, default), seguro pra acesso web.
 
-1. Suba a stack e abra **http://127.0.0.1:8090**.
-2. Banco vazio → cai automaticamente em **/setup**.
-3. Preencha admin + organização → pronto, já entra logado.
+1. Suba a stack e pegue o **código de instalação** no log: `docker compose logs app`.
+2. Abra **http://127.0.0.1:8090**. Banco vazio → cai automaticamente em **/setup**.
+3. Informe o código, preencha admin + organização → pronto, já entra logado.
 
-Protegido server-side por `users-count == 0` em transação (só roda uma vez; ninguém recria o admin depois).
+```
+┌────────────────────────────────────────────────────────────┐
+│ PRIMEIRO ACESSO — código de instalação                     │
+│                                                            │
+│   K7QM-2XRA-PZ4W-ND6T  (novo a cada reinício)              │
+└────────────────────────────────────────────────────────────┘
+```
+
+O código prova que quem está no navegador também tem acesso ao servidor: sem ele, quem chegasse primeiro a uma instância recém-exposta viraria o super-admin. Ele muda a cada reinício; para fixá-lo (deploy automatizado), defina `SETUP_TOKEN`. Protegido também server-side por `users-count == 0` em transação com lock (só roda uma vez; ninguém recria o admin depois, nem duas chamadas simultâneas criam dois).
 
 > **Não há "admin separado".** O usuário que você cria no wizard **já é o admin**: é o **super-admin da plataforma** (acessa o back-office `/admin`) **e** o **dono (owner)** da primeira organização. Uma conta só, com as duas capacidades. As contas `super@finance.sh` / `admin@finance.sh` que aparecem por aí são apenas **seed de dev** (`SEED=true`) e **bootstrap headless** (`BOOTSTRAP_ADMIN=true`) — não existem no deploy real.
 
@@ -381,7 +389,7 @@ Pra automação/CI sem navegador, `BOOTSTRAP_ADMIN=true`: a app cria o admin no 
 
 ### Credenciais de demonstração (dev)
 
-Com `SEED=true` (default em dev), o backend também cria usuários de exemplo (nesse caso o admin automático é pulado, pois já existem usuários):
+Com `SEED=true` (só com `APP_ENV=development`), o backend também cria usuários de exemplo (nesse caso o admin automático é pulado, pois já existem usuários):
 
 | Tipo | E-mail | Senha |
 |---|---|---|
@@ -408,6 +416,8 @@ Self-hosted normalmente roda **sem SMTP** configurado. Há 3 caminhos pra recupe
 
 2. **Link no log.** O fluxo `/forgot-password` da UI gera um token; **sem SMTP, o link `…/reset-password?token=…` é escrito no log**. Pegue em `docker compose logs app` e abra no navegador.
 
+   > **Atenção:** sem SMTP, quem lê o log da app consegue redefinir a senha de **qualquer** conta (inclusive a do super-admin) pedindo um "esqueci a senha" para ela. Restrinja o acesso aos logs (e a quem os coleta) como restringe o acesso ao servidor, ou configure o SMTP.
+
 3. **Super-admin.** No back-office `/admin` → Usuários → resetar a senha de outro usuário (força troca no próximo login).
 
 > Com SMTP configurado (`SMTP_*`), o `/forgot-password` envia o link por e-mail normalmente.
@@ -425,23 +435,28 @@ Todas em [`.env.example`](.env.example). Resumo:
 | `SWAGGER_ENABLED` | `true` | Expor Swagger UI. **`false` em produção.** |
 | `FRONTEND_URL` | `http://localhost:8090` | URL pública da SPA (links de e-mail, CORS). |
 | `BOOTSTRAP_ADMIN` | `false` | `false` = setup wizard no 1º acesso (você cria o admin pela web). `true` = cria admin no boot e loga a senha (deploy headless). |
+| `SETUP_TOKEN` | — | Código que o setup wizard pede (mínimo 16 caracteres; mais curto é ignorado). Vazio = um aleatório por boot, impresso no log enquanto não há usuário; o definido aqui não é impresso. |
+| `REGISTRATION_OPEN` | `true` | Cadastro público. `false` = só convites e contas criadas pelo super-admin (um convidado sem conta depende do super-admin). Recomendado `false` numa instância exposta à internet. |
 | `ADMIN_EMAIL` | `admin@finance.sh` | E-mail do admin criado no 1º boot. |
 | `ADMIN_PASSWORD` | _(vazio)_ | Senha do admin. Vazio = gera aleatória e loga no boot. Sempre forçada a trocar no 1º login. |
 | `ADMIN_ORG_NAME` | `Minha Organização` | Nome da organização criada com o admin. |
-| `ENCRYPTION_KEY` | _(base64 32B)_ | Chave AES-256 pra cifrar PII/2FA. **Trocar em produção:** `openssl rand -base64 32`. |
+| `ENCRYPTION_KEY` | _(base64 32B)_ | Chave AES-256 que cifra as notas dos lançamentos e o segredo do 2FA. **Trocar em produção:** `openssl rand -base64 32`. |
 | `DB_HOST` | `postgres` (compose) | Host do PostgreSQL. |
 | `DB_PORT` | `5433` | Porta no host. Interno: `5432`. |
 | `DB_USER` / `DB_PASSWORD` / `DB_NAME` | `finance_sh` | Credenciais/banco. **Trocar em produção.** |
 | `DB_SSLMODE` | `prefer` | Dev: `prefer`. Prod: `require`/`verify-full`. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | `dev-...` | **Trocar em produção.** |
 | `JWT_ACCESS_TTL_MIN` / `JWT_REFRESH_TTL_DAYS` | `15` / `7` | TTLs dos tokens. |
-| `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MIN` | `5` / `15` | Brute-force lockout. |
+| `JWT_SESSION_MAX_DAYS` | `30` | Prazo máximo de uma sessão: renovar o refresh token não a estende além disso. Reapresentar um refresh token já trocado derruba a sessão inteira (sinal de token roubado). |
+| `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MIN` | `5` / `15` | Bloqueio por tentativas: no login, por e-mail **e IP** (quem só sabe o e-mail não tranca a conta de outra pessoa); na troca de senha e exclusão de conta, por conta. Fica em memória (um restart zera). Redefinir a senha zera todos. |
 | `SMTP_*` | _(vazio)_ | Sem SMTP → backend loga e-mails no stdout. |
 | `CORS_ORIGINS` | `http://localhost:8090,http://localhost:5173` | Origens permitidas (CSV). Same-origin em prod; relevante só pro Vite dev. |
 | `RATE_LIMIT_RPM` | `120` | Limite de requisições por minuto por IP (token bucket in-memory, por processo). |
+| `AUTH_RATE_LIMIT_RPM` | `30` | Limite mais apertado, por IP, para login, cadastro, 2FA, esqueci a senha, verificação de e-mail e `/setup/initialize` (refresh e logout ficam no limite geral). |
+| `TRUSTED_PROXIES` | só loopback | IPs/CIDRs (CSV) cujo `X-Forwarded-For`/`X-Real-IP` é aceito; de outros endereços o cabeçalho é ignorado. Proxy reverso em outro container ou fora do host: ponha a rede dele (ex. `172.16.0.0/12` na rede do Docker), senão todos os clientes dividem o limite do IP do proxy. |
 | `RETENTION_DAYS` | `90` | Dias até purga de dados expirados/excluídos (LGPD). |
 | `TERMS_VERSION` | `1.0` | Versão dos Termos/Privacidade (consentimento versionado). |
-| `SEED` | `true` | Popular dados demo no boot. |
+| `SEED` | `false` | Popular dados demo no boot. Recusado com `APP_ENV=production` (as contas demo têm senhas públicas). |
 | `JOBS_IN_PROCESS` | `true` | Scheduler como goroutine in-process na app. `false` desliga o scheduler (ex.: múltiplas réplicas onde só uma agenda). |
 | `WORKER_INTERVAL_SEC` | `3600` | Intervalo do loop do scheduler (segundos). |
 | `VITE_API_URL` | `/api/v1` | Base da API usada pela SPA. |
@@ -532,7 +547,7 @@ Controles já implementados:
 - Senhas com **bcrypt**; **lockout** de brute-force.
 - **RBAC** + **isolamento por organization_id**.
 - **Rate limiting** e **CORS** restrito.
-- **Criptografia de campo** AES-256-GCM via `ENCRYPTION_KEY` para PII/segredo 2FA.
+- **Criptografia de campo** AES-256-GCM via `ENCRYPTION_KEY` para as **notas dos lançamentos** e o **segredo do 2FA**. Os demais dados (inclusive CPF/CNPJ, e-mail e telefone dos contatos) ficam em texto no banco: proteja o volume do Postgres com disco criptografado (veja *Backups criptografados*).
 - **Log de auditoria**, **soft delete** e **purga por retenção** (`RETENTION_DAYS`).
 - **Isolamento de rede**: rede de dados `internal` (postgres sem rota externa); porta do Postgres em `127.0.0.1`; app atrás do seu proxy (fixe em loopback se o proxy é local).
 - **Endurecimento de container**: non-root, `no-new-privileges`, `cap_drop: ALL`, rootfs `read_only` + `tmpfs`, limites de memória/PIDs e rotação de logs.
@@ -551,7 +566,7 @@ make backup                                       # gera backups/finance_sh-...s
 make restore FILE=backups/finance_sh-AAAAMMDD-HHMMSS.sql.gpg
 ```
 
-Dumps cifrados com **GPG AES-256** e podados por `RETENTION_DAYS`. Guarde o diretório de backups e o volume `pgdata` em **disco criptografado** (LUKS / volume cloud criptografado) — cobre criptografia em repouso do que não é cifrado em campo.
+Dumps cifrados com **GPG AES-256** e podados por `BACKUP_RETENTION_DAYS` (padrão 90; independente do `RETENTION_DAYS` da purga LGPD). Guarde o diretório de backups e o volume `pgdata` em **disco criptografado** (LUKS / volume cloud criptografado) — cobre criptografia em repouso do que não é cifrado em campo.
 
 ### ⚠️ Faça backup da `ENCRYPTION_KEY` (crítico)
 

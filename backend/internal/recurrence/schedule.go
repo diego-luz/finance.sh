@@ -35,6 +35,29 @@ func Next(from time.Time, freq string, interval int) time.Time {
 	}
 }
 
+// Nth is the n-th occurrence after start (n = 0 is start itself), always
+// counted from the anchor. Chaining Next on the previous occurrence drifts
+// for month ends: 31/01 -> 28/02 -> 28/03 -> ...; from the anchor the third
+// one is 31/03 again.
+func Nth(start time.Time, freq string, interval, n int) time.Time {
+	if interval < 1 {
+		interval = 1
+	}
+	switch freq {
+	case "daily":
+		return start.AddDate(0, 0, interval*n)
+	case "weekly":
+		return start.AddDate(0, 0, interval*7*n)
+	case "yearly":
+		return addMonthsClamped(start, interval*12*n)
+	default:
+		return addMonthsClamped(start, interval*n)
+	}
+}
+
+// AddMonthsClamped is addMonthsClamped for other packages (installments).
+func AddMonthsClamped(t time.Time, months int) time.Time { return addMonthsClamped(t, months) }
+
 // addMonthsClamped adds `months` calendar months to t, clamping the day of month
 // to the number of days in the target month so the date never rolls over into the
 // next month (which time.AddDate would do for e.g. Jan 31 + 1 month).

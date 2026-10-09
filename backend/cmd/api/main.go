@@ -91,6 +91,14 @@ func main() {
 	}
 
 	if os.Getenv("SEED") == "true" {
+		// The seed creates accounts whose passwords are public (README,
+		// CONTRIBUTING): super@finance.sh is a platform super-admin. Refuse it
+		// in production the same way a published ENCRYPTION_KEY is refused.
+		if cfg.IsProduction() {
+			log.Error("SEED=true is refused with APP_ENV=production: the demo accounts have public passwords. " +
+				"Set SEED=false, or APP_ENV=development on a throwaway instance.")
+			os.Exit(1)
+		}
 		if err := database.Seed(db); err != nil {
 			log.Error("failed to seed database", "error", err)
 			os.Exit(1)
@@ -160,7 +168,7 @@ func main() {
 
 	// Services.
 	authSvc := services.NewAuthService(userRepo, passwordResetRepo, cfg, loginLimiter, mail, db)
-	lgpdSvc := services.NewLGPDService(db, userRepo)
+	lgpdSvc := services.NewLGPDService(db, userRepo, loginLimiter)
 	accountSvc := services.NewAccountService(accountRepo, txRepo, dashCache)
 	categorySvc := services.NewCategoryService(categoryRepo, dashCache)
 	contactSvc := services.NewContactService(contactRepo)
@@ -172,7 +180,7 @@ func main() {
 	creditCardSvc := services.NewCreditCardService(creditCardRepo, txRepo, accountRepo, dashCache)
 	goalSvc := services.NewGoalService(goalRepo)
 	budgetSvc := services.NewBudgetService(budgetRepo, categoryRepo)
-	memberSvc := services.NewMemberService(membershipRepo, userRepo)
+	memberSvc := services.NewMemberService(membershipRepo, userRepo, strings.TrimSpace(cfg.SMTP.Host) != "")
 	organizationSvc := services.NewOrganizationService(organizationRepo, db)
 	notificationSvc := services.NewNotificationService(notificationRepo)
 	reportSvc := services.NewReportService(txRepo, accountRepo, categoryRepo, contactRepo, userRepo)
@@ -189,6 +197,9 @@ func main() {
 	// First-run setup wizard (public bootstrap). Issues its own tokens because
 	// the new user has no session yet; bypasses the closed-registration gate.
 	setupSvc := services.NewSetupService(userRepo, cfg, db)
+	if needs, err := setupSvc.NeedsSetup(context.Background()); err == nil && needs {
+		printSetupBanner(setupSvc.SetupToken(), setupSvc.SetupTokenFixed())
+	}
 
 	// Router.
 	router := handlers.NewRouter(handlers.Deps{
@@ -356,6 +367,28 @@ func printAdminBanner(email, password string) {
 	fmt.Fprintln(os.Stdout, pad("  senha:  "+password+"  (aleatória)"))
 	fmt.Fprintln(os.Stdout, pad(""))
 	fmt.Fprintln(os.Stdout, pad("Defina ADMIN_PASSWORD no .env para fixar."))
+	fmt.Fprintln(os.Stdout, "└"+line+"┘")
+}
+
+// printSetupBanner shows the code the first-run wizard asks for. It goes to
+// stdout (docker compose logs app) only while no user exists yet.
+func printSetupBanner(token string, fixo bool) {
+	const w = 60
+	line := strings.Repeat("─", w)
+	pad := func(s string) string {
+		n := utf8.RuneCountInString(s)
+		return "│ " + s + strings.Repeat(" ", max(0, w-2-n)) + " │"
+	}
+	linha := "  " + token + "  (novo a cada reinício)"
+	if fixo {
+		linha = "  o definido em SETUP_TOKEN" // not printed: the operator has it
+	}
+	fmt.Fprintln(os.Stdout, "┌"+line+"┐")
+	fmt.Fprintln(os.Stdout, pad("PRIMEIRO ACESSO — código de instalação"))
+	fmt.Fprintln(os.Stdout, pad(""))
+	fmt.Fprintln(os.Stdout, pad(linha))
+	fmt.Fprintln(os.Stdout, pad(""))
+	fmt.Fprintln(os.Stdout, pad("O assistente da web pede este código."))
 	fmt.Fprintln(os.Stdout, "└"+line+"┘")
 }
 

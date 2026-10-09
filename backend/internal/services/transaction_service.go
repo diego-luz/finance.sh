@@ -10,6 +10,7 @@ import (
 	"github.com/finance-sh/finance-sh/internal/cards"
 	"github.com/finance-sh/finance-sh/internal/dto"
 	"github.com/finance-sh/finance-sh/internal/entities"
+	"github.com/finance-sh/finance-sh/internal/recurrence"
 	"github.com/finance-sh/finance-sh/internal/repositories"
 	"github.com/finance-sh/finance-sh/pkg/cache"
 	"github.com/finance-sh/finance-sh/pkg/crypto"
@@ -27,6 +28,13 @@ var ErrCreditCardNotInOrg = errors.New("cartão de crédito não pertence à org
 // ErrContactNotInOrg is returned when a transaction references a contact that
 // does not belong to the caller's organization (tenant guard).
 var ErrContactNotInOrg = errors.New("contato não pertence à organização")
+
+// ErrInvalidTransfer: a transfer needs a destination account other than the
+// source. Without one, Balances debited the source and credited nobody.
+var ErrInvalidTransfer = errors.New("transferência precisa de uma conta de destino diferente da de origem")
+
+// ErrInstallmentTooSmall: fewer cents than installments would leave parcels of 0.
+var ErrInstallmentTooSmall = errors.New("valor menor que o número de parcelas")
 
 type TransactionService struct {
 	txs         *repositories.TransactionRepository
@@ -193,6 +201,9 @@ func (s *TransactionService) createInstallmentGroup(orgID uuid.UUID, req dto.Tra
 	}
 
 	n := req.Installments
+	if tmpl.Amount < int64(n) {
+		return nil, ErrInstallmentTooSmall
+	}
 	per := tmpl.Amount / int64(n)
 	remainder := tmpl.Amount - per*int64(n)
 
@@ -203,7 +214,9 @@ func (s *TransactionService) createInstallmentGroup(orgID uuid.UUID, req dto.Tra
 		if i == 1 {
 			amount += remainder // keep the sum exact
 		}
-		date := tmpl.Date.AddDate(0, i-1, 0)
+		// clamped to the month's last day: AddDate rolled 31/01 + 1 month to
+		// 03/03, leaving February's invoice empty and March's with two parcels
+		date := recurrence.AddMonthsClamped(tmpl.Date, i-1)
 
 		p := &entities.Transaction{
 			OrganizationID:     orgID,
@@ -230,7 +243,7 @@ func (s *TransactionService) createInstallmentGroup(orgID uuid.UUID, req dto.Tra
 			due := inv.DueDate
 			p.DueDate = &due
 		} else if req.DueDate != nil {
-			d := req.DueDate.AddDate(0, i-1, 0)
+			d := recurrence.AddMonthsClamped(*req.DueDate, i-1)
 			p.DueDate = &d
 		}
 		parcelas = append(parcelas, p)
@@ -545,6 +558,13 @@ func (s *TransactionService) buildEntity(orgID uuid.UUID, t *entities.Transactio
 	}
 
 	var transferID *uuid.UUID
+	if req.Type == string(entities.TxTransfer) {
+		if req.TransferAccountID == "" || req.TransferAccountID == req.AccountID {
+			return nil, ErrInvalidTransfer
+		}
+	} else {
+		req.TransferAccountID = "" // only a transfer has a destination
+	}
 	if req.TransferAccountID != "" {
 		tid, err := parseUUID(req.TransferAccountID)
 		if err != nil {
@@ -585,6 +605,14 @@ func (s *TransactionService) buildEntity(orgID uuid.UUID, t *entities.Transactio
 	t.Description = req.Description
 	t.Date = req.Date
 	t.DueDate = req.DueDate
+	// PaidAt follows Paid: editing used to leave "paid without a date" or
+	// "unpaid with the old payment date"
+	if req.Paid && (!t.Paid || t.PaidAt == nil) {
+		agora := time.Now().UTC()
+		t.PaidAt = &agora
+	} else if !req.Paid {
+		t.PaidAt = nil
+	}
 	t.Paid = req.Paid
 	// Recurring is no longer accepted on the write path (the RecurrenceRule engine
 	// supersedes the legacy per-transaction flag). On create the entity defaults to

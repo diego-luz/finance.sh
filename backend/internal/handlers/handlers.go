@@ -55,6 +55,12 @@ func writeServiceError(w http.ResponseWriter, err error) bool {
 		response.Error(w, http.StatusUnprocessableEntity, "invalid_rule", err.Error())
 	case errors.Is(err, services.ErrInvalidRecurrence):
 		response.Error(w, http.StatusUnprocessableEntity, "invalid_recurrence", err.Error())
+	case errors.Is(err, services.ErrInvalidTransfer):
+		response.Error(w, http.StatusUnprocessableEntity, "invalid_transfer", err.Error())
+	case errors.Is(err, services.ErrInstallmentTooSmall):
+		response.Error(w, http.StatusUnprocessableEntity, "installment_too_small", err.Error())
+	case errors.Is(err, services.ErrTooManyRows):
+		response.Error(w, http.StatusUnprocessableEntity, "too_many_rows", err.Error())
 	case errors.Is(err, services.ErrEmptyImport):
 		response.Error(w, http.StatusUnprocessableEntity, "empty_import", err.Error())
 	case errors.Is(err, services.ErrUnsupportedFormat):
@@ -71,6 +77,10 @@ func writeServiceError(w http.ResponseWriter, err error) bool {
 		response.Error(w, http.StatusForbidden, "forbidden", err.Error())
 	case errors.Is(err, services.ErrAlreadyMember):
 		response.Error(w, http.StatusConflict, "already_member", err.Error())
+	case errors.Is(err, services.ErrInvitationUnverified):
+		response.Error(w, http.StatusForbidden, "email_not_verified", err.Error())
+	case errors.Is(err, services.ErrInvitationEmail):
+		response.Error(w, http.StatusForbidden, "invitation_email_mismatch", err.Error())
 	case errors.Is(err, services.ErrInvitationToken):
 		response.Error(w, http.StatusNotFound, "invalid_invitation", err.Error())
 	case errors.Is(err, services.ErrInvalidToken):

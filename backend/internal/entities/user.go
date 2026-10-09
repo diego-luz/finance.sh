@@ -40,6 +40,9 @@ type User struct {
 	// it is a credential equivalent; it is never serialised to JSON.
 	TwoFactorEnabled bool                   `gorm:"default:false" json:"two_factor_enabled"`
 	TwoFactorSecret  crypto.EncryptedString `gorm:"type:text" json:"-"`
+	// TOTPLastStep is the last 30-second step whose code was accepted; a code
+	// from that step or an older one is refused (no replay).
+	TOTPLastStep int64 `gorm:"column:totp_last_step;not null;default:0" json:"-"`
 
 	Memberships []Membership `json:"memberships,omitempty"`
 }
@@ -79,6 +82,13 @@ type RefreshToken struct {
 	Revoked   bool      `gorm:"default:false" json:"revoked"`
 	UserAgent string    `json:"user_agent,omitempty"`
 	IP        string    `json:"ip,omitempty"`
+	// FamilyID is shared by every token rotated from the same login; a token
+	// presented again after being rotated revokes the whole family.
+	FamilyID uuid.UUID `gorm:"type:uuid;index" json:"-"`
+	// SessionExpiresAt is the family's absolute deadline: rotating no longer
+	// stretches a session forever.
+	SessionExpiresAt *time.Time `json:"-"`
+	RevokedAt        *time.Time `json:"-"`
 }
 
 func (RefreshToken) TableName() string { return "refresh_tokens" }

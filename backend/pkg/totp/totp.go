@@ -4,9 +4,13 @@ package totp
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 )
 
@@ -25,6 +29,27 @@ func Generate(issuer, account string) (secret, url string, err error) {
 
 // Validate reports whether code is a currently valid TOTP for secret. It uses
 // the default skew so a code from the adjacent window is still accepted.
+// ValidateStep is Validate that also says which 30-second step the code
+// belongs to (current one, or the one before or after), so the caller can
+// refuse a step it has already accepted: a code seen over someone's shoulder,
+// or replayed from a log, stayed valid for about 90 seconds.
+func ValidateStep(code, secret string, now time.Time) (int64, bool) {
+	code = strings.TrimSpace(code)
+	if len(code) != 6 {
+		return 0, false
+	}
+	atual := now.Unix() / 30
+	for _, passo := range []int64{atual - 1, atual, atual + 1} {
+		esperado, err := totp.GenerateCodeCustom(secret, time.Unix(passo*30, 0), totp.ValidateOpts{
+			Period: 30, Digits: otp.DigitsSix, Algorithm: otp.AlgorithmSHA1,
+		})
+		if err == nil && subtle.ConstantTimeCompare([]byte(esperado), []byte(code)) == 1 {
+			return passo, true
+		}
+	}
+	return 0, false
+}
+
 func Validate(code, secret string) bool {
 	return totp.Validate(code, secret)
 }

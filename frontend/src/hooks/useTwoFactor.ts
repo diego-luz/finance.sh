@@ -15,8 +15,8 @@ function setTwoFactorFlag(enabled: boolean) {
 /** Starts 2FA enrollment: fetches the TOTP secret + otpauth URL. */
 export function useTwoFactorSetup() {
   const toast = useToast();
-  return useMutation<TwoFactorSetupResponse, ApiRequestError, void>({
-    mutationFn: () => twoFactorService.setup(),
+  return useMutation<TwoFactorSetupResponse, ApiRequestError, string>({
+    mutationFn: (password: string) => twoFactorService.setup(password),
     onError: (err: ApiRequestError) =>
       toast.error(err.message || 'Não foi possível iniciar a configuração.'),
   });

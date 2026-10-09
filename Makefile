@@ -43,8 +43,8 @@ build: ## Build all images
 	$(COMPOSE) build
 
 # ---- Data / shells ----------------------------------------------------------
-seed: ## Seed demo data (restarts app with SEED=true)
-	SEED=true $(COMPOSE) up -d --force-recreate --no-deps app
+seed: ## Seed demo data (restarts app with SEED=true; demo passwords are public, so APP_ENV=development)
+	SEED=true APP_ENV=development $(COMPOSE) up -d --force-recreate --no-deps app
 
 db-shell: ## Open a psql shell on postgres
 	$(COMPOSE) exec postgres psql -U $(DB_USER) -d $(DB_NAME)
