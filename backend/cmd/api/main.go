@@ -198,7 +198,7 @@ func main() {
 	// the new user has no session yet; bypasses the closed-registration gate.
 	setupSvc := services.NewSetupService(userRepo, cfg, db)
 	if needs, err := setupSvc.NeedsSetup(context.Background()); err == nil && needs {
-		printSetupBanner(setupSvc.SetupToken(), cfg.SetupToken != "")
+		printSetupBanner(setupSvc.SetupToken(), setupSvc.SetupTokenFixed())
 	}
 
 	// Router.
@@ -370,8 +370,6 @@ func printAdminBanner(email, password string) {
 	fmt.Fprintln(os.Stdout, "└"+line+"┘")
 }
 
-// printResetBanner shows the new password set by `-reset-password` in a box that
-// stands out from structured logs. The user must change it on next login.
 // printSetupBanner shows the code the first-run wizard asks for. It goes to
 // stdout (docker compose logs app) only while no user exists yet.
 func printSetupBanner(token string, fixo bool) {
@@ -381,19 +379,21 @@ func printSetupBanner(token string, fixo bool) {
 		n := utf8.RuneCountInString(s)
 		return "│ " + s + strings.Repeat(" ", max(0, w-2-n)) + " │"
 	}
-	origem := "(novo a cada reinício)"
+	linha := "  " + token + "  (novo a cada reinício)"
 	if fixo {
-		origem = "(de SETUP_TOKEN)"
+		linha = "  o definido em SETUP_TOKEN" // not printed: the operator has it
 	}
 	fmt.Fprintln(os.Stdout, "┌"+line+"┐")
 	fmt.Fprintln(os.Stdout, pad("PRIMEIRO ACESSO — código de instalação"))
 	fmt.Fprintln(os.Stdout, pad(""))
-	fmt.Fprintln(os.Stdout, pad("  "+token+"  "+origem))
+	fmt.Fprintln(os.Stdout, pad(linha))
 	fmt.Fprintln(os.Stdout, pad(""))
 	fmt.Fprintln(os.Stdout, pad("O assistente da web pede este código."))
 	fmt.Fprintln(os.Stdout, "└"+line+"┘")
 }
 
+// printResetBanner shows the new password set by `-reset-password` in a box that
+// stands out from structured logs. The user must change it on next login.
 func printResetBanner(email, password string) {
 	const w = 60
 	line := strings.Repeat("─", w)

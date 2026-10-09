@@ -20,6 +20,7 @@ import (
 	"github.com/finance-sh/finance-sh/pkg/hash"
 	"github.com/finance-sh/finance-sh/pkg/jwt"
 	"github.com/finance-sh/finance-sh/pkg/logger"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -41,6 +42,10 @@ var (
 // setupLockKey serialises concurrent Initialize calls (pg_advisory_xact_lock):
 // under READ COMMITTED the in-tx COUNT alone let two callers both see zero.
 const setupLockKey = 0x66696e616e6365 // "finance"
+
+// minSetupTokenLen is the shortest SETUP_TOKEN accepted (after removing dashes
+// and spaces); the random one is 16 base32 characters.
+const minSetupTokenLen = 16
 
 // minSetupPasswordLen mirrors the validate:"min=8" tag on SetupUser.Password so
 // programmatic callers (not the HTTP layer) still get the same guard.
@@ -68,6 +73,11 @@ func NewSetupService(
 	db *gorm.DB,
 ) *SetupService {
 	token := normalizeSetupToken(cfg.SetupToken)
+	if token != "" && len(token) < minSetupTokenLen {
+		// a short fixed code is guessable on an exposed instance: use a random one
+		slog.Error("SETUP_TOKEN ignored: shorter than 16 characters; a random setup code is used instead")
+		token = ""
+	}
 	if token == "" {
 		token = newSetupToken()
 	}
@@ -77,6 +87,12 @@ func NewSetupService(
 // SetupToken is the code the wizard asks for; main prints it at boot while
 // the platform still needs setup.
 func (s *SetupService) SetupToken() string { return formatSetupToken(s.token) }
+
+// SetupTokenFixed reports whether the code came from SETUP_TOKEN (and so is
+// not printed: the operator already has it, and logs travel further).
+func (s *SetupService) SetupTokenFixed() bool {
+	return normalizeSetupToken(s.cfg.SetupToken) == s.token
+}
 
 // newSetupToken returns 80 random bits as 16 base32 characters.
 func newSetupToken() string {
@@ -241,12 +257,20 @@ func (s *SetupService) issueSetupTokens(user *entities.User, org *entities.Organ
 	if err != nil {
 		return nil, fmt.Errorf("setup: random refresh: %w", err)
 	}
+	// a session family like any login (see AuthService.issueTokensIn)
+	fimSessao := time.Now().Add(s.cfg.JWT.SessionMaxAge)
+	expira := time.Now().Add(s.cfg.JWT.RefreshTTL)
+	if expira.After(fimSessao) {
+		expira = fimSessao
+	}
 	rt := &entities.RefreshToken{
-		UserID:    user.ID,
-		TokenHash: hash.SHA256(raw),
-		ExpiresAt: time.Now().Add(s.cfg.JWT.RefreshTTL),
-		UserAgent: meta.UserAgent,
-		IP:        meta.IP,
+		UserID:           user.ID,
+		TokenHash:        hash.SHA256(raw),
+		ExpiresAt:        expira,
+		UserAgent:        meta.UserAgent,
+		IP:               meta.IP,
+		FamilyID:         uuid.New(),
+		SessionExpiresAt: &fimSessao,
 	}
 	if err := s.users.SaveRefreshToken(rt); err != nil {
 		return nil, fmt.Errorf("setup: persist refresh: %w", err)
