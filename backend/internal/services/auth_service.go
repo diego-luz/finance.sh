@@ -325,6 +325,28 @@ func (s *AuthService) Refresh(rawToken string, meta AuthMeta) (*dto.AuthResponse
 	return s.issueTokensIn(user, org, role, meta, familia, fim)
 }
 
+// checkPasswordLimited verifies a logged-in user's current password under the
+// same per-account attempt budget as login. Without it, a stolen access token
+// could guess the password through change-password or account deletion with no
+// lockout at all, then change it and revoke the owner's sessions.
+func checkPasswordLimited(lim *lockout.Limiter, user *entities.User, password string) error {
+	ctx := context.Background()
+	key := strings.ToLower(strings.TrimSpace(user.Email))
+	if lim != nil && lim.Locked(ctx, key) {
+		return ErrAccountLocked
+	}
+	if !hash.Check(user.PasswordHash, password) {
+		if lim != nil {
+			lim.RegisterFailure(ctx, key)
+		}
+		return ErrWrongPassword
+	}
+	if lim != nil {
+		lim.Reset(ctx, key)
+	}
+	return nil
+}
+
 // refreshReuseGrace is how recently a token may have been rotated and still be
 // presented again without being taken as theft (two tabs refreshing at once).
 const refreshReuseGrace = 30 * time.Second
@@ -385,8 +407,8 @@ func (s *AuthService) ChangePassword(userID uuid.UUID, currentPassword, newPassw
 	if err != nil {
 		return ErrUserNotFound
 	}
-	if !hash.Check(user.PasswordHash, currentPassword) {
-		return ErrWrongPassword
+	if err := checkPasswordLimited(s.lockout, user, currentPassword); err != nil {
+		return err
 	}
 
 	newHash, err := hash.Password(newPassword)
