@@ -20,10 +20,19 @@ function activeDateLocale(): Locale {
   return dateFnsLocales[lang] ?? ptBR;
 }
 
+/**
+ * A calendar date the API sends as UTC midnight (transactions, due dates,
+ * goals) or as a bare yyyy-MM-dd. Read in the local zone, "2026-05-12T00:00:00Z"
+ * is 11/05 at 21:00 in UTC-3, so it showed one day early.
+ */
+const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})(?:T00:00:00(?:\.0+)?(?:Z|[+-]00:?00))?$/;
+
 /** Format an ISO date string for display, e.g. "12 mai 2026". */
 export function formatDate(iso: string, pattern = "dd MMM yyyy"): string {
   if (!iso) return '';
-  const d = parseISO(iso);
+  const cal = CALENDAR_DATE.exec(iso);
+  // calendar dates keep their day; real timestamps are shown in local time
+  const d = cal ? new Date(Number(cal[1]), Number(cal[2]) - 1, Number(cal[3])) : parseISO(iso);
   if (!isValid(d)) return '';
   return format(d, pattern, { locale: activeDateLocale() });
 }
