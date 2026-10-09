@@ -24,6 +24,9 @@ var ErrInvalidRecurrence = errors.New("regra de recorrência inválida")
 // remaining occurrences are picked up on the next worker tick.
 const maxCatchUpPerRun = 60
 
+// maxRecurrenceBackfillYears is how far in the past a new rule may start.
+const maxRecurrenceBackfillYears = 2
+
 // RecurrenceService is the proper recurring-transaction engine. It owns the
 // RecurrenceRule CRUD and the worker-driven generation of transactions from due
 // rules. It depends only on repositories + the pure recurrence package, so it
@@ -142,6 +145,12 @@ func (s *RecurrenceService) apply(orgID uuid.UUID, rule *entities.RecurrenceRule
 		return ErrInvalidRecurrence
 	}
 	if req.StartDate.IsZero() {
+		return ErrInvalidRecurrence
+	}
+	// A daily rule starting in year 1, plus repeated POST /recurrences/{id}/run,
+	// produced 60 back-dated transactions per call with no end. Catching up a
+	// couple of years covers every honest case.
+	if isCreate && req.StartDate.Before(time.Now().AddDate(-maxRecurrenceBackfillYears, 0, 0)) {
 		return ErrInvalidRecurrence
 	}
 	if req.MaxOccurrences < 0 {
