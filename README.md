@@ -335,7 +335,7 @@ URLs (portas de host deslocadas pra não conflitar):
 | Swagger UI | http://127.0.0.1:8090/swagger | Só em dev (mesma porta da app). |
 | PostgreSQL | `127.0.0.1:5433` | Loopback only. |
 
-Pra popular dados de demonstração, mantenha `SEED=true` no `.env` (já é o padrão) ou rode `make seed`.
+Pra popular dados de demonstração, ponha `SEED=true` e `APP_ENV=development` no `.env` ou rode `make seed` (o padrão é `SEED=false`). Com `APP_ENV=production` o app se recusa a subir com `SEED=true`, porque as contas de demonstração têm senhas públicas.
 
 ---
 
@@ -381,7 +381,7 @@ Pra automação/CI sem navegador, `BOOTSTRAP_ADMIN=true`: a app cria o admin no 
 
 ### Credenciais de demonstração (dev)
 
-Com `SEED=true` (default em dev), o backend também cria usuários de exemplo (nesse caso o admin automático é pulado, pois já existem usuários):
+Com `SEED=true` (só com `APP_ENV=development`), o backend também cria usuários de exemplo (nesse caso o admin automático é pulado, pois já existem usuários):
 
 | Tipo | E-mail | Senha |
 |---|---|---|
@@ -441,7 +441,7 @@ Todas em [`.env.example`](.env.example). Resumo:
 | `RATE_LIMIT_RPM` | `120` | Limite de requisições por minuto por IP (token bucket in-memory, por processo). |
 | `RETENTION_DAYS` | `90` | Dias até purga de dados expirados/excluídos (LGPD). |
 | `TERMS_VERSION` | `1.0` | Versão dos Termos/Privacidade (consentimento versionado). |
-| `SEED` | `true` | Popular dados demo no boot. |
+| `SEED` | `false` | Popular dados demo no boot. Recusado com `APP_ENV=production` (as contas demo têm senhas públicas). |
 | `JOBS_IN_PROCESS` | `true` | Scheduler como goroutine in-process na app. `false` desliga o scheduler (ex.: múltiplas réplicas onde só uma agenda). |
 | `WORKER_INTERVAL_SEC` | `3600` | Intervalo do loop do scheduler (segundos). |
 | `VITE_API_URL` | `/api/v1` | Base da API usada pela SPA. |

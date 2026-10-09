@@ -290,8 +290,10 @@ func SeedSuperAdmin(db *gorm.DB) error {
 		EmailVerified:    true,
 		SuperAdmin:       true,
 		TwoFactorEnabled: false,
-		TermsAcceptedAt:  &now,
-		TermsVersion:     "1.0",
+		// the password above is public; the first login has to replace it
+		MustChangePassword: true,
+		TermsAcceptedAt:    &now,
+		TermsVersion:       "1.0",
 	}
 	return db.Create(admin).Error
 }
