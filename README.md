@@ -434,6 +434,7 @@ Todas em [`.env.example`](.env.example). Resumo:
 | `FRONTEND_URL` | `http://localhost:8090` | URL pública da SPA (links de e-mail, CORS). |
 | `BOOTSTRAP_ADMIN` | `false` | `false` = setup wizard no 1º acesso (você cria o admin pela web). `true` = cria admin no boot e loga a senha (deploy headless). |
 | `SETUP_TOKEN` | — | Código que o setup wizard pede. Vazio = um aleatório por boot, impresso no log enquanto não há usuário. |
+| `REGISTRATION_OPEN` | `true` | Cadastro público. `false` = só convites e contas criadas pelo super-admin (um convidado sem conta depende do super-admin). Recomendado `false` numa instância exposta à internet. |
 | `ADMIN_EMAIL` | `admin@finance.sh` | E-mail do admin criado no 1º boot. |
 | `ADMIN_PASSWORD` | _(vazio)_ | Senha do admin. Vazio = gera aleatória e loga no boot. Sempre forçada a trocar no 1º login. |
 | `ADMIN_ORG_NAME` | `Minha Organização` | Nome da organização criada com o admin. |
