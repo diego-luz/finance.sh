@@ -40,6 +40,9 @@ type User struct {
 	// it is a credential equivalent; it is never serialised to JSON.
 	TwoFactorEnabled bool                   `gorm:"default:false" json:"two_factor_enabled"`
 	TwoFactorSecret  crypto.EncryptedString `gorm:"type:text" json:"-"`
+	// TOTPLastStep is the last 30-second step whose code was accepted; a code
+	// from that step or an older one is refused (no replay).
+	TOTPLastStep int64 `gorm:"column:totp_last_step;not null;default:0" json:"-"`
 
 	Memberships []Membership `json:"memberships,omitempty"`
 }

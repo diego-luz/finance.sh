@@ -343,8 +343,21 @@ func (r *UserRepository) FindRecoveryCode(userID uuid.UUID, codeHash string) (*e
 	return &rc, err
 }
 
-// UseRecoveryCode marks a recovery code consumed.
-func (r *UserRepository) UseRecoveryCode(id uuid.UUID) error {
-	return r.db.Model(&entities.RecoveryCode{}).
-		Where("id = ?", id).Update("used", true).Error
+// UseRecoveryCode marks a recovery code consumed and reports whether this call
+// did it: with "AND used = false" two parallel uses of the same code can no
+// longer both succeed.
+func (r *UserRepository) UseRecoveryCode(id uuid.UUID) (bool, error) {
+	res := r.db.Model(&entities.RecoveryCode{}).
+		Where("id = ? AND used = false", id).Update("used", true)
+	return res.RowsAffected == 1, res.Error
+}
+
+// ClaimTOTPStep records step as the user's last accepted TOTP step, only if it
+// is newer than the stored one, and reports whether it was. Atomic, so two
+// requests carrying the same code cannot both pass.
+func (r *UserRepository) ClaimTOTPStep(userID uuid.UUID, step int64) (bool, error) {
+	res := r.db.Model(&entities.User{}).
+		Where("id = ? AND totp_last_step < ?", userID, step).
+		Update("totp_last_step", step)
+	return res.RowsAffected == 1, res.Error
 }
