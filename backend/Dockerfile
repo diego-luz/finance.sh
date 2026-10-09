@@ -15,9 +15,11 @@
 FROM node:22-alpine AS spa
 WORKDIR /spa
 
-# Install deps first for better layer caching; fall back to install if no lock.
-COPY frontend/package.json frontend/package-lock.json* ./
-RUN npm ci || npm install
+# Install deps first for better layer caching. Only what the lockfile pins: the
+# old "|| npm install" fallback installed unpinned versions whenever the lock
+# drifted, silently, in the production image.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 
 # Source tree (respects frontend/.dockerignore).
 COPY frontend/ ./
