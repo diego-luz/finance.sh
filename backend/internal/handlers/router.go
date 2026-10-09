@@ -110,6 +110,7 @@ func NewRouter(d Deps) *chi.Mux {
 		// spent by the SPA's ~30 lazy chunks, fonts and the service-worker
 		// precache, and a 429 there kept the PWA from installing.
 		r.Use(middlewares.RateLimit(d.Config.RateLimitRPM))
+		r.Use(middlewares.NoStore)
 		// Public
 		r.Get("/health", health.Health)
 		r.Route("/auth", func(r chi.Router) {
