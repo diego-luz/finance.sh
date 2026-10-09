@@ -55,7 +55,7 @@ body:
     attributes:
       label: Logs / stack trace
       description: |
-        Saída relevante de `docker compose logs backend --tail=200`, console do navegador (F12), ou stderr de execução bare-metal.
+        Saída relevante de `docker compose logs app --tail=200`, console do navegador (F12), ou stderr de execução bare-metal.
         Use ` ``` ` para preservar formatação. Sanitize secrets.
       render: shell
     validations:
@@ -110,7 +110,7 @@ body:
     attributes:
       label: Confirmação
       options:
-        - label: Li o [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) e concordo em segui-lo.
+        - label: Li o [CODE_OF_CONDUCT.md](https://github.com/diego-luz/finance.sh/blob/main/CODE_OF_CONDUCT.md) e concordo em segui-lo.
           required: true
         - label: Pesquisei issues existentes e este não é duplicado.
           required: true

@@ -135,8 +135,8 @@ Aplicados pelo backend (Go) em toda resposta (o binário serve a SPA diretamente
 - Imagens fixadas por tag (TODO prod: fixar por **digest** `@sha256:`).
 
 ### CI / cadeia de suprimentos
-- **govulncheck** (Go), **gosec** (SAST, advisory), **npm audit --audit-level=high**
-  (frontend), **gitleaks** (segredos, histórico completo), **trivy** (filesystem +
+- **govulncheck** (Go), **gosec** (SAST, advisory), **npm audit** (frontend: bloqueia em
+  high+ nas dependências de runtime; build tooling só reporta), **gitleaks** (segredos, histórico completo), **trivy** (filesystem +
   config + imagem). Build de imagem roda em todo PR (sem push); push só na `main`.
 
 ---
