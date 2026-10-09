@@ -185,6 +185,8 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
+          # accepted findings, each with an expiry date (see the file)
+          trivyignores: .trivyignore
           scanners: vuln,misconfig,secret
           severity: CRITICAL,HIGH
           # Don't break the build on findings; review the SARIF report.
@@ -287,6 +289,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image
+          trivyignores: .trivyignore
           image-ref: ghcr.io/${{ steps.meta.outputs.owner }}/finance-sh-app:latest
           severity: CRITICAL,HIGH
           exit-code: "0"
