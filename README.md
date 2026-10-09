@@ -439,6 +439,8 @@ Todas em [`.env.example`](.env.example). Resumo:
 | `SMTP_*` | _(vazio)_ | Sem SMTP → backend loga e-mails no stdout. |
 | `CORS_ORIGINS` | `http://localhost:8090,http://localhost:5173` | Origens permitidas (CSV). Same-origin em prod; relevante só pro Vite dev. |
 | `RATE_LIMIT_RPM` | `120` | Limite de requisições por minuto por IP (token bucket in-memory, por processo). |
+| `AUTH_RATE_LIMIT_RPM` | `30` | Limite mais apertado, por IP, para `/auth/*` e `/setup/initialize` (login, cadastro, esqueci a senha). |
+| `TRUSTED_PROXIES` | loopback e redes privadas | IPs/CIDRs (CSV) cujo `X-Forwarded-For`/`X-Real-IP` é aceito. De outros endereços o cabeçalho é ignorado. |
 | `RETENTION_DAYS` | `90` | Dias até purga de dados expirados/excluídos (LGPD). |
 | `TERMS_VERSION` | `1.0` | Versão dos Termos/Privacidade (consentimento versionado). |
 | `SEED` | `false` | Popular dados demo no boot. Recusado com `APP_ENV=production` (as contas demo têm senhas públicas). |
