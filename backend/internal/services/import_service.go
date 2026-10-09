@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 
@@ -26,10 +25,11 @@ var ErrUnsupportedFormat = errors.New("formato de arquivo não suportado")
 // MaxImportRows caps one statement import. A 10 MB CSV of short lines is ~700k
 // rows, and each row used to cost queries: one request could keep Postgres busy
 // for minutes. Real statements are far below this.
-const MaxImportRows = 5000
+const MaxImportRows = imports.MaxRows
 
-// ErrTooManyRows is returned when a statement exceeds MaxImportRows (HTTP 422).
-var ErrTooManyRows = fmt.Errorf("arquivo com mais de %d lançamentos; divida-o por período", MaxImportRows)
+// ErrTooManyRows is returned when a statement exceeds MaxImportRows (HTTP 422);
+// the parsers return it themselves, before building the rows.
+var ErrTooManyRows = imports.ErrTooManyRows
 
 // ImportService parses bank statements (OFX/CSV) and turns them into
 // transactions in a stateless two-step flow: Preview parses + flags duplicates

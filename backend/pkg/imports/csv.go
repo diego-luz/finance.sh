@@ -70,11 +70,31 @@ func ParseCSV(r io.Reader, opts CSVOptions) ([]ParsedRow, error) {
 	reader.LazyQuotes = true
 	reader.TrimLeadingSpace = true
 
-	records, err := reader.ReadAll()
-	if err != nil {
-		// csv.ReadAll aborts on the first malformed record; fall back to a
-		// line-by-line tolerant read so a single bad line does not kill the import.
-		records = tolerantRead(text, delim)
+	// Record by record, stopping past MaxRows: ReadAll plus a ParsedRow slice
+	// sized to it took ~500 MB for a 10 MB file of one-character lines and the
+	// container was killed before the row limit was ever checked.
+	var records [][]string
+	for {
+		rec, rerr := reader.Read()
+		if rerr == io.EOF {
+			break
+		}
+		if rerr != nil {
+			// a malformed record aborts the csv reader; fall back to a
+			// line-by-line tolerant read so one bad line does not kill the import.
+			records, err = tolerantRead(text, delim)
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
+		if isBlankRecord(rec) {
+			continue
+		}
+		records = append(records, rec)
+		if len(records) > MaxRows+1 { // +1: an optional header line
+			return nil, ErrTooManyRows
+		}
 	}
 	if len(records) == 0 {
 		return nil, fmt.Errorf("nenhuma linha encontrada no CSV")
@@ -106,7 +126,7 @@ func ParseCSV(r io.Reader, opts CSVOptions) ([]ParsedRow, error) {
 		descCol = 1
 	}
 
-	rows := make([]ParsedRow, 0, len(records))
+	rows := make([]ParsedRow, 0, min(len(records), MaxRows))
 	var errs []string
 	for i := start; i < len(records); i++ {
 		rec := records[i]
@@ -257,7 +277,7 @@ func detectDelimiter(text string) rune {
 
 // tolerantRead is a fallback splitter used when csv.ReadAll fails on a malformed
 // record. It splits each line on the delimiter without quote handling.
-func tolerantRead(text string, delim rune) [][]string {
+func tolerantRead(text string, delim rune) ([][]string, error) {
 	var out [][]string
 	sc := bufio.NewScanner(strings.NewReader(text))
 	sc.Buffer(make([]byte, 1024*1024), 1024*1024)
@@ -267,8 +287,11 @@ func tolerantRead(text string, delim rune) [][]string {
 			continue
 		}
 		out = append(out, strings.Split(line, string(delim)))
+		if len(out) > MaxRows+1 {
+			return nil, ErrTooManyRows
+		}
 	}
-	return out
+	return out, nil
 }
 
 // lastIndex returns the index of the last column of the widest record (used as

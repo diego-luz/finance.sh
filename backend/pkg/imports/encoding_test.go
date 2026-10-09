@@ -58,3 +58,18 @@ func TestDecimalToCents(t *testing.T) {
 	assert.True(t, neg)
 	assert.Equal(t, int64(123456), cents)
 }
+
+func TestParseStopsPastMaxRows(t *testing.T) {
+	// one-character lines: the shape that blew memory up
+	_, err := ParseCSV(strings.NewReader(strings.Repeat("1\n", 2_000_000)), CSVOptions{DateCol: -1, DescCol: -1, AmountCol: -1})
+	assert.ErrorIs(t, err, ErrTooManyRows)
+
+	ok := strings.Repeat("01/09/2026;Loja;-1,00\n", MaxRows)
+	rows, err := ParseCSV(strings.NewReader(ok), CSVOptions{Delimiter: ';', DecimalSep: ',', DateFormat: "02/01/2006", DateCol: -1, DescCol: -1, AmountCol: -1})
+	require.NoError(t, err)
+	assert.Len(t, rows, MaxRows)
+
+	ofx := "<OFX>" + strings.Repeat("<STMTTRN><DTPOSTED>20260901<TRNAMT>-1.00<NAME>x</STMTTRN>", MaxRows+1) + "</OFX>"
+	_, err = ParseOFX(strings.NewReader(ofx))
+	assert.ErrorIs(t, err, ErrTooManyRows)
+}
