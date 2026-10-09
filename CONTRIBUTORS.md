@@ -42,7 +42,7 @@ _(em breve)_
 
 ### Segurança (responsible disclosure)
 
-Pessoas que reportaram vulnerabilidades de forma privada via [GitHub Security Advisories](https://github.com/finance-sh/finance-sh/security/advisories). Listamos com permissão.
+Pessoas que reportaram vulnerabilidades de forma privada via [GitHub Security Advisories](https://github.com/diego-luz/finance.sh/security/advisories). Listamos com permissão.
 
 _(nenhuma divulgação ainda)_
 

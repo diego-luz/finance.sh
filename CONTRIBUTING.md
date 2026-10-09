@@ -26,7 +26,7 @@ Obrigado por considerar contribuir. **finance.sh** é controle financeiro open-s
 ## Antes de começar
 
 - Leia o [README.md](README.md) e a [arquitetura](docs/ARCHITECTURE.md).
-- Veja se sua ideia/bug **já está em uma [issue aberta](https://github.com/finance-sh/finance-sh/issues)**.
+- Veja se sua ideia/bug **já está em uma [issue aberta](https://github.com/diego-luz/finance.sh/issues)**.
 - Para mudanças grandes (refactor, nova área do produto, mudança de stack), **abra uma issue de discussão antes** de escrever código — economiza retrabalho.
 - Tudo neste projeto está em pt-BR como idioma primário. Issues, PRs e código podem ser em pt-BR ou en — escolha a maioritária do thread.
 
@@ -73,8 +73,8 @@ O projeto é 100% open-source (AGPL-3.0) — não há edição paga. Features en
 ### Subir o stack
 
 ```bash
-git clone https://github.com/finance-sh/finance-sh
-cd finance-sh
+git clone https://github.com/diego-luz/finance.sh
+cd finance.sh
 ./scripts/gen-env.sh          # gera .env com segredos próprios (não há default)
 docker compose up -d --build
 ```
@@ -300,9 +300,9 @@ Sem CLA (Contributor License Agreement). DCO é suficiente.
 
 ## Comunidade
 
-- **Discussões e dúvidas:** [GitHub Discussions](https://github.com/finance-sh/finance-sh/discussions)
-- **Bugs e features:** [Issues](https://github.com/finance-sh/finance-sh/issues)
-- **Código de conduta:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) (em breve — base [Contributor Covenant 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/))
+- **Bugs, features e dúvidas:** [Issues](https://github.com/diego-luz/finance.sh/issues)
+- **Vulnerabilidades:** [reporte privado](https://github.com/diego-luz/finance.sh/security/advisories/new), nunca em issue pública
+- **Código de conduta:** [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) (baseado no [Contributor Covenant 2.1](https://www.contributor-covenant.org/version/2/1/code_of_conduct/))
 
 Seja respeitoso. Críticas são sobre código, não sobre pessoas. Mantenedores reservam o direito de remover comentários abusivos e banir contas reincidentes.
 
