@@ -8,6 +8,33 @@ Formato baseado em [Keep a Changelog 1.1.0](https://keepachangelog.com/pt-BR/1.1
 
 ---
 
+## [Unreleased]
+
+Mudanças na `main` depois da 0.1.0, ainda sem versão.
+
+### Security
+
+- Duas rodadas de auditoria de segurança (PRs #1 e #3): código de instalação no primeiro acesso, rotação do refresh token com detecção de reuso e prazo máximo de sessão, códigos de 2FA e de recuperação de uso único, ativar 2FA pede a senha, bloqueio de login por e-mail e IP, convites só como hash, com validade e presos ao e-mail, `X-Forwarded-For` só de proxy confiável, limite por IP nas rotas de login, corpo JSON limitado a 1 MB, `Cache-Control: no-store` na API, `SEED=true` recusado em produção.
+- Dependências atualizadas (golang-jwt, x/crypto, x/net, x/text, excelize, pgx, chi) e Go 1.26+; alertas de code scanning zerados, com os riscos aceitos e com validade no `.trivyignore` (PRs #5 e #6).
+- Canal de vulnerabilidades pelo reporte privado do GitHub (PR #8).
+
+### Fixed
+
+- Sessão: renovação coordenada entre abas, sem logout por 429 ou falta de rede, troca de senha mantendo a sessão atual.
+- Lançamentos: parcelas respeitam o fim do mês, transferência exige conta de destino, `paid_at` acompanha o pago.
+- Relatórios: extrato e PDF mensal sem o dia 1 do mês seguinte; datas não aparecem mais um dia antes em UTC-3.
+- Recorrência: sem duplicar em execuções simultâneas, sem mudar de dia no fim do mês, sem gerar em conta ou organização excluída.
+- Importação: OFX e CSV em Windows-1252, valores sem `float`, limite de 5.000 linhas lido em streaming.
+- Backup e restore: scripts executáveis, backup atômico, restore em transação única.
+
+### Changed
+
+- README enxuto, com instalação, configuração, funcionalidades e roadmap em `docs/` (PR #7).
+- `npm audit` no CI bloqueia só as dependências de produção (PR #4).
+- Frontend com testes de unidade (Vitest).
+
+---
+
 ## [0.1.0] — 2026-05-29
 
 🎉 **Primeiro release** do finance.sh (AGPL-3.0). Controle financeiro 100% open-source self-hosted para pessoa física, MEI e microempresa no Brasil. Sem edições pagas, sem tiers.
@@ -136,4 +163,5 @@ GitHub Actions workflow `.github/workflows/ci.yml` com:
 
 ---
 
-[0.1.0]: https://github.com/finance-sh/finance-sh/releases/tag/v0.1.0
+[Unreleased]: https://github.com/diego-luz/finance.sh/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/diego-luz/finance.sh/releases/tag/v0.1.0
