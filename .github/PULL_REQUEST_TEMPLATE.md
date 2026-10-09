@@ -1,6 +1,6 @@
 <!--
 Obrigado pelo PR! Para acelerar a review, preencha as seções abaixo.
-Veja CONTRIBUTING.md antes de submeter: https://github.com/finance-sh/finance-sh/blob/main/CONTRIBUTING.md
+Veja CONTRIBUTING.md antes de submeter: https://github.com/diego-luz/finance.sh/blob/main/CONTRIBUTING.md
 -->
 
 ## Tipo de mudança
