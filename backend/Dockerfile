@@ -66,4 +66,9 @@ EXPOSE 8080
 # Run unprivileged. The compose runtime also sets read_only rootfs + no-new-privileges.
 USER finance_sh
 
+# The compose file has its own healthcheck; this one covers plain `docker run`
+# and orchestrators that only read the image. busybox wget ships with alpine.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1
+
 ENTRYPOINT ["/app/api"]

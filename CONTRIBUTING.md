@@ -65,7 +65,7 @@ O projeto é 100% open-source (AGPL-3.0) — não há edição paga. Features en
 | Ferramenta | Versão mínima | Motivo |
 |---|---|---|
 | Docker + Docker Compose v2 | 24+ | Stack inteira sobe por compose |
-| Go | 1.25+ | Backend |
+| Go | 1.26+ | Backend |
 | Node.js | 20 LTS | Frontend + Landing |
 | Make (opcional) | — | Atalhos no `Makefile` |
 | golang-migrate (opcional) | v4 | Migrations manuais |
@@ -113,7 +113,7 @@ npm run dev                                     # Vite em :5173, proxy automáti
 
 | Camada | Tech |
 |---|---|
-| App (binário único) | Go 1.25+ · chi · GORM · PostgreSQL 16 · SPA embutida (`go:embed`) + API + scheduler in-process |
+| App (binário único) | Go 1.26+ · chi · GORM · PostgreSQL 16 · SPA embutida (`go:embed`) + API + scheduler in-process |
 | Frontend SPA | React 18 + TS + Vite 6 + Tailwind + React Query + Zustand + Recharts + lucide-react · PWA · i18n pt-BR/en/es |
 | Anexos | Postgres BYTEA (sem object store externo) |
 | TLS / edge | reverse proxy do operador (Traefik/Caddy/Nginx Proxy Manager) — não embutido |
