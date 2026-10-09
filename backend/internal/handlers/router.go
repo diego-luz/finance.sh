@@ -142,6 +142,7 @@ func NewRouter(d Deps) *chi.Mux {
 		// RequireSuperAdmin (loads the user and 403s unless User.SuperAdmin).
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(middlewares.Auth(d.Config))
+			r.Use(middlewares.AccountGate(d.Users))
 			r.Use(middlewares.RequireSuperAdmin(d.Users))
 
 			r.Get("/stats", admin.Stats)
@@ -164,6 +165,7 @@ func NewRouter(d Deps) *chi.Mux {
 		// scoped, so they live here too.
 		r.Group(func(r chi.Router) {
 			r.Use(middlewares.Auth(d.Config))
+			r.Use(middlewares.AccountGate(d.Users))
 			r.Post("/invitations/accept", members.AcceptInvitation)
 
 			// Two-factor management.
@@ -194,6 +196,7 @@ func NewRouter(d Deps) *chi.Mux {
 		// Protected: requires a valid access token and an active tenant.
 		r.Group(func(r chi.Router) {
 			r.Use(middlewares.Auth(d.Config))
+			r.Use(middlewares.AccountGate(d.Users))
 			r.Use(middlewares.Tenant(d.Users))
 			r.Use(middlewares.Audit(d.DB))
 
