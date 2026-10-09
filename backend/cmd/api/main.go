@@ -91,6 +91,14 @@ func main() {
 	}
 
 	if os.Getenv("SEED") == "true" {
+		// The seed creates accounts whose passwords are public (README,
+		// CONTRIBUTING): super@finance.sh is a platform super-admin. Refuse it
+		// in production the same way a published ENCRYPTION_KEY is refused.
+		if cfg.IsProduction() {
+			log.Error("SEED=true is refused with APP_ENV=production: the demo accounts have public passwords. " +
+				"Set SEED=false, or APP_ENV=development on a throwaway instance.")
+			os.Exit(1)
+		}
 		if err := database.Seed(db); err != nil {
 			log.Error("failed to seed database", "error", err)
 			os.Exit(1)
