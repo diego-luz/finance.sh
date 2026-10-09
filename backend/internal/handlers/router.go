@@ -57,7 +57,13 @@ func NewRouter(d Deps) *chi.Mux {
 	// Global middleware: request id, real client IP, panic recovery, structured
 	// logging, CORS and per-IP rate limiting.
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// the client IP from X-Forwarded-For only when a trusted proxy sent it;
+	// chi's middleware.RealIP believed it from anyone (see middlewares.RealIP)
+	trusted := d.Config.TrustedProxies
+	if len(trusted) == 0 {
+		trusted = middlewares.DefaultTrustedProxies
+	}
+	r.Use(middlewares.RealIP(middlewares.ParseTrustedProxies(trusted)))
 	r.Use(middleware.Recoverer)
 	r.Use(middlewares.Logger(d.Logger))
 	// Security headers (CSP, X-Frame-Options, nosniff, ...) applied to every
@@ -104,6 +110,9 @@ func NewRouter(d Deps) *chi.Mux {
 		// Public
 		r.Get("/health", health.Health)
 		r.Route("/auth", func(r chi.Router) {
+			// its own, tighter per-IP budget: login is locked per e-mail, but
+			// one IP trying a password on many accounts is only stopped here
+			r.Use(middlewares.RateLimit(d.Config.AuthRateLimitRPM))
 			r.Post("/register", auth.Register)
 			r.Post("/login", auth.Login)
 			r.Post("/refresh", auth.Refresh)
@@ -125,7 +134,7 @@ func NewRouter(d Deps) *chi.Mux {
 		// server-side by an in-transaction users-count == 0 check.
 		r.Route("/setup", func(r chi.Router) {
 			r.Get("/status", setup.Status)
-			r.Post("/initialize", setup.Initialize)
+			r.With(middlewares.RateLimit(d.Config.AuthRateLimitRPM)).Post("/initialize", setup.Initialize)
 		})
 
 		// Platform back-office (super-admin). PLATFORM-level, NOT tenant-scoped:
