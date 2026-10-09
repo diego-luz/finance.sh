@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -347,25 +346,50 @@ func parseSignedDecimal(raw string, decimalSep rune) (int64, bool, bool) {
 		return 0, false, false
 	}
 
-	f, err := strconv.ParseFloat(normalized, 64)
-	if err != nil {
+	cents, ok := decimalToCents(normalized)
+	if !ok {
 		return 0, false, false
-	}
-	// Round to cents to avoid binary float drift (e.g. 12.34 -> 1234).
-	cents := int64(f*100 + boolSign(f))
-	if cents < 0 {
-		cents = -cents
 	}
 	return cents, negative, true
 }
 
-// boolSign returns 0.5 for non-negative and -0.5 for negative, used to round to
-// the nearest cent in either direction.
-func boolSign(f float64) float64 {
-	if f < 0 {
-		return -0.5
+// maxImportDigits bounds the integer part (up to a trillion reais) so the
+// cents always fit in an int64; float64 used to overflow into garbage.
+const maxImportDigits = 13
+
+// decimalToCents turns "<digits>[.<digits>]" into cents without floating
+// point: the fraction is rounded half-up to two places.
+func decimalToCents(s string) (int64, bool) {
+	inteira, frac, _ := strings.Cut(s, ".")
+	if strings.Contains(frac, ".") {
+		return 0, false
 	}
-	return 0.5
+	inteira = strings.TrimLeft(inteira, "0")
+	if len(inteira) > maxImportDigits {
+		return 0, false
+	}
+	var cents int64
+	for _, c := range inteira {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		cents = cents*10 + int64(c-'0')
+	}
+	cents *= 100
+	for i, c := range frac {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		switch {
+		case i == 0:
+			cents += 10 * int64(c-'0')
+		case i == 1:
+			cents += int64(c - '0')
+		case i == 2 && c >= '5':
+			cents++
+		}
+	}
+	return cents, true
 }
 
 // normalizeNumber converts a numeric string using either an explicit decimal

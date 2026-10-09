@@ -41,3 +41,20 @@ func TestParseCSVWindows1252(t *testing.T) {
 func TestToUTF8KeepsUTF8(t *testing.T) {
 	assert.Equal(t, "ação", string(ToUTF8([]byte("ação"))))
 }
+
+func TestDecimalToCents(t *testing.T) {
+	cases := map[string]int64{"12.34": 1234, "0.1": 10, "5": 500, "1234567.89": 123456789, "0.005": 1, "0.004": 0, "19.999": 2000, ".5": 50}
+	for in, want := range cases {
+		got, ok := decimalToCents(in)
+		assert.True(t, ok, in)
+		assert.Equal(t, want, got, in)
+	}
+	for _, in := range []string{"99999999999999999999.00", "1.2.3", "1a.00"} {
+		_, ok := decimalToCents(in)
+		assert.False(t, ok, in)
+	}
+	cents, neg, ok := parseSignedDecimal("-R$ 1.234,56", ',')
+	assert.True(t, ok)
+	assert.True(t, neg)
+	assert.Equal(t, int64(123456), cents)
+}
