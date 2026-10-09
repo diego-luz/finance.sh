@@ -10,9 +10,9 @@ Mantêm o projeto, fazem review de PR, cortam releases e decidem rumo arquitetur
 
 | Nome | GitHub | Função |
 |---|---|---|
-| Diego Alves | [@diegoalvescs](https://github.com/diegoalvescs) | Mantenedor principal · Arquitetura, backend Go, infra |
+| Diego Luz | [@diego-luz](https://github.com/diego-luz) | Mantenedor principal · Arquitetura, backend Go, frontend, infra |
 
-> Quer virar mantenedor? Histórico consistente de PRs de qualidade + participação em discussões abre porta. Não tem processo formal — peça por e-mail quando se sentir confortável.
+> Quer virar mantenedor? Um histórico consistente de PRs de qualidade e de participação nas issues abre a porta. Não há processo formal: quando se sentir à vontade, peça numa [issue](https://github.com/diego-luz/finance.sh/issues).
 
 ---
 
@@ -20,7 +20,7 @@ Mantêm o projeto, fazem review de PR, cortam releases e decidem rumo arquitetur
 
 <!-- CONTRIBUTORS:START -->
 
-_Lista vazia por enquanto. Será preenchida automaticamente pelo `scripts/gen-contributors.sh` quando houver primeiros commits após a release pública v0.1.0._
+_Sem contribuidores externos ainda. Seja o primeiro: veja [CONTRIBUTING.md](CONTRIBUTING.md)._
 
 <!-- CONTRIBUTORS:END -->
 
@@ -52,7 +52,7 @@ _(em breve)_
 
 ### Comunidade
 
-Quem ajuda nas Discussions, responde dúvidas, organiza encontros ou divulga.
+Quem ajuda nas issues, responde dúvidas, organiza encontros ou divulga.
 
 _(em breve)_
 
@@ -73,8 +73,8 @@ Reconhecimento honesto às referências que moldaram **finance.sh**:
 ## Como aparecer aqui
 
 1. Abra um PR seguindo [CONTRIBUTING.md](CONTRIBUTING.md).
-2. Após merge, na próxima release, um mantenedor roda `scripts/gen-contributors.sh` e seu nome aparece na tabela.
-3. Para reconhecimento em categoria não-código (tradução, design, segurança, etc.), abra issue ou mande e-mail.
+2. Depois do merge, na próxima release, um mantenedor roda `scripts/gen-contributors.sh` e seu nome aparece na tabela.
+3. Para reconhecimento numa categoria fora do código (tradução, design, documentação, etc.), abra uma issue. Vulnerabilidades seguem o [SECURITY.md](docs/SECURITY.md).
 
 ---
 
