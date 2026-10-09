@@ -113,11 +113,16 @@ func (r *Runner) PurgeSoftDeleted() error {
 		name  string
 		model interface{}
 	}{
+		// children first: their FKs (NO ACTION) made the parents' purge fail
+		{"attachments", &entities.Attachment{}},
+		{"recurrence_rules", &entities.RecurrenceRule{}},
+		{"category_rules", &entities.CategoryRule{}},
 		{"transactions", &entities.Transaction{}},
 		{"budgets", &entities.Budget{}},
 		{"goals", &entities.Goal{}},
 		{"credit_cards", &entities.CreditCard{}},
 		{"categories", &entities.Category{}},
+		{"tags", &entities.Tag{}},
 		{"accounts", &entities.Account{}},
 		{"notifications", &entities.Notification{}},
 		{"invitations", &entities.Invitation{}},

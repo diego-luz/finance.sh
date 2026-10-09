@@ -26,3 +26,13 @@ func TestAddMonthsClamped(t *testing.T) {
 		assert.Equal(t, c.quer, AddMonthsClamped(c.de, c.meses), "%s + %d", c.de.Format("2006-01-02"), c.meses)
 	}
 }
+
+func TestNthDoesNotDrift(t *testing.T) {
+	inicio := time.Date(2027, 1, 31, 0, 0, 0, 0, time.UTC)
+	var datas []string
+	for n := 0; n < 4; n++ {
+		datas = append(datas, Nth(inicio, "monthly", 1, n).Format("2006-01-02"))
+	}
+	assert.Equal(t, []string{"2027-01-31", "2027-02-28", "2027-03-31", "2027-04-30"}, datas)
+	assert.Equal(t, "2027-01-14", Nth(time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), "weekly", 2, 1).Format("2006-01-02"))
+}

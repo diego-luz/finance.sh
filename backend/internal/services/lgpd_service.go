@@ -197,7 +197,15 @@ func (s *LGPDService) DeleteAccount(userID uuid.UUID, password string) error {
 				}
 
 				// Soft-delete all financial data scoped to the org.
+				// Receipts are erased right away (Unscoped): they are personal
+				// data and the soft-deleted rows kept the bytes until the purge.
+				if err := tx.Unscoped().Where("organization_id = ?", orgID).Delete(&entities.Attachment{}).Error; err != nil {
+					return err
+				}
 				for _, model := range []interface{}{
+					&entities.RecurrenceRule{},
+					&entities.CategoryRule{},
+					&entities.Tag{},
 					&entities.Transaction{},
 					&entities.Budget{},
 					&entities.Goal{},

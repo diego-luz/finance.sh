@@ -12,6 +12,7 @@ import (
 	"github.com/finance-sh/finance-sh/pkg/cache"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // ErrInvalidRecurrence is returned when a recurrence rule is malformed (bad
@@ -289,9 +290,17 @@ func (s *RecurrenceService) RunNow(orgID, id uuid.UUID) (int, error) {
 // is no longer due, so a re-run (or a later worker tick) will not re-generate it.
 // When the schedule is exhausted (EndDate passed or MaxOccurrences reached) the
 // rule is deactivated. The mutated rule is persisted inside the same transaction.
-func (s *RecurrenceService) generateForRule(rule *entities.RecurrenceRule, now time.Time) (int, error) {
+func (s *RecurrenceService) generateForRule(stale *entities.RecurrenceRule, now time.Time) (int, error) {
 	created := 0
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		// Re-read and lock the rule inside the transaction: two simultaneous
+		// "run now" calls (or one plus the worker) both read the old cursor
+		// and generated the same occurrences twice.
+		var rule entities.RecurrenceRule
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&rule, "id = ?", stale.ID).Error; err != nil {
+			return err
+		}
 		for i := 0; i < maxCatchUpPerRun; i++ {
 			if !rule.Active {
 				break
@@ -332,7 +341,13 @@ func (s *RecurrenceService) generateForRule(rule *entities.RecurrenceRule, now t
 			rule.OccurrencesCount++
 			gen := now
 			rule.LastGeneratedAt = &gen
-			rule.NextRunDate = recurrence.Next(occDate, rule.Frequency, rule.Interval)
+			// counted from the anchor so month ends do not drift; Next on the
+			// last date is the fallback if an edited start date would step back
+			next := recurrence.Nth(rule.StartDate, rule.Frequency, rule.Interval, rule.OccurrencesCount)
+			if !next.After(occDate) {
+				next = recurrence.Next(occDate, rule.Frequency, rule.Interval)
+			}
+			rule.NextRunDate = next
 
 			// Re-evaluate the bounds after advancing so the rule is deactivated as
 			// soon as it is exhausted (no extra occurrence is generated).
@@ -347,7 +362,7 @@ func (s *RecurrenceService) generateForRule(rule *entities.RecurrenceRule, now t
 		}
 		// Persist the rule's advanced schedule/state inside the same transaction so
 		// the occurrences and the cursor move atomically.
-		return tx.Save(rule).Error
+		return tx.Save(&rule).Error
 	})
 	if err != nil {
 		return 0, err

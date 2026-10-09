@@ -71,11 +71,15 @@ func (r *RecurrenceRuleRepository) List(orgID uuid.UUID) ([]entities.RecurrenceR
 // extra round-trips.
 func (r *RecurrenceRuleRepository) DueRules(now time.Time) ([]entities.RecurrenceRule, error) {
 	var rules []entities.RecurrenceRule
+	// Only rules whose account and organization still exist: the worker kept
+	// generating into deleted accounts and into organizations erased by LGPD.
 	err := r.db.Preload("Account").Preload("Category").
-		Where("active = ? AND next_run_date <= ?", true, now).
-		Where("max_occurrences = 0 OR occurrences_count < max_occurrences").
-		Where("end_date IS NULL OR next_run_date <= end_date").
-		Order("next_run_date asc").
+		Joins("JOIN accounts acc ON acc.id = recurrence_rules.account_id AND acc.deleted_at IS NULL").
+		Joins("JOIN organizations org ON org.id = recurrence_rules.organization_id AND org.deleted_at IS NULL").
+		Where("recurrence_rules.active = ? AND recurrence_rules.next_run_date <= ?", true, now).
+		Where("recurrence_rules.max_occurrences = 0 OR recurrence_rules.occurrences_count < recurrence_rules.max_occurrences").
+		Where("recurrence_rules.end_date IS NULL OR recurrence_rules.next_run_date <= recurrence_rules.end_date").
+		Order("recurrence_rules.next_run_date asc").
 		Find(&rules).Error
 	return rules, err
 }
