@@ -1,9 +1,9 @@
 module github.com/finance-sh/finance-sh
 
-go 1.25.0
+go 1.26.0
 
 require (
-	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-chi/chi/v5 v5.3.2
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/httprate v0.9.0
 	github.com/go-pdf/fpdf v0.9.0
@@ -15,8 +15,8 @@ require (
 	github.com/pquerna/otp v1.4.0
 	github.com/stretchr/testify v1.11.1
 	github.com/xuri/excelize/v2 v2.11.0
-	golang.org/x/crypto v0.53.0
-	golang.org/x/text v0.41.0
+	golang.org/x/crypto v0.57.0
+	golang.org/x/text v0.42.0
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/gorm v1.25.10
 )
@@ -48,8 +48,8 @@ require (
 	github.com/xuri/efp v0.0.1 // indirect
 	github.com/xuri/nfp v0.0.2-0.20250530014748-2ddeb826f9a9 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
