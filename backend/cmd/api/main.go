@@ -180,7 +180,7 @@ func main() {
 	creditCardSvc := services.NewCreditCardService(creditCardRepo, txRepo, accountRepo, dashCache)
 	goalSvc := services.NewGoalService(goalRepo)
 	budgetSvc := services.NewBudgetService(budgetRepo, categoryRepo)
-	memberSvc := services.NewMemberService(membershipRepo, userRepo)
+	memberSvc := services.NewMemberService(membershipRepo, userRepo, strings.TrimSpace(cfg.SMTP.Host) != "")
 	organizationSvc := services.NewOrganizationService(organizationRepo, db)
 	notificationSvc := services.NewNotificationService(notificationRepo)
 	reportSvc := services.NewReportService(txRepo, accountRepo, categoryRepo, contactRepo, userRepo)

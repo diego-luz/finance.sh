@@ -20,6 +20,8 @@ var (
 	// ErrInvitationEmail: the link was sent to another address. Anyone holding a
 	// leaked link (chat, log) used to join with the invited role.
 	ErrInvitationEmail = errors.New("este convite foi enviado para outro e-mail; entre com a conta convidada")
+	// ErrInvitationUnverified: confirm the e-mail before accepting an invite.
+	ErrInvitationUnverified = errors.New("confirme o seu e-mail (pelo link enviado no cadastro) antes de aceitar o convite")
 	// ErrOwnerOnly is returned when an admin attempts an action reserved to owners
 	// (granting/altering/removing the owner role). Mapped to HTTP 403.
 	ErrOwnerOnly = errors.New("apenas um proprietário pode conceder ou alterar o papel de proprietário")
@@ -28,13 +30,17 @@ var (
 type MemberService struct {
 	members *repositories.MembershipRepository
 	users   *repositories.UserRepository
+	// requireVerified: accepting an invite needs a verified e-mail. Only when
+	// SMTP is configured, since without it nobody can verify an address.
+	requireVerified bool
 }
 
 func NewMemberService(
 	members *repositories.MembershipRepository,
 	users *repositories.UserRepository,
+	requireVerified bool,
 ) *MemberService {
-	return &MemberService{members: members, users: users}
+	return &MemberService{members: members, users: users, requireVerified: requireVerified}
 }
 
 // ----- Members -----
@@ -168,8 +174,15 @@ func (s *MemberService) AcceptInvitation(userID uuid.UUID, token string) (*dto.M
 	if err != nil {
 		return nil, ErrInvitationToken
 	}
-	if !strings.EqualFold(strings.TrimSpace(user.Email), inv.Email) {
+	// Byte-exact on the lower-cased address: strings.EqualFold also folds
+	// Unicode, so "ſam@x" (long s) matched an invite for "sam@x".
+	if strings.ToLower(strings.TrimSpace(user.Email)) != inv.Email {
 		return nil, ErrInvitationEmail
+	}
+	// With open signup, whoever holds a leaked link could register the invited
+	// address and accept; a verified address proves they own it.
+	if s.requireVerified && !user.EmailVerified {
+		return nil, ErrInvitationUnverified
 	}
 	if existing, err := s.members.MembershipByUserOrg(userID, inv.OrganizationID); err == nil && existing != nil {
 		return nil, ErrAlreadyMember
