@@ -49,6 +49,9 @@ func ParseOFX(r io.Reader) ([]ParsedRow, error) {
 
 		if row, ok := parseSTMTTRN(block); ok {
 			rows = append(rows, row)
+			if len(rows) > MaxRows {
+				return nil, ErrTooManyRows
+			}
 		}
 	}
 	return rows, nil
