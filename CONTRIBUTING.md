@@ -2,8 +2,6 @@
 
 Obrigado por considerar contribuir. **finance.sh** é controle financeiro open-source self-hosted (AGPL-3.0) para pessoa física, MEI e microempresa no Brasil. Este guia cobre tudo que você precisa para abrir uma issue, mandar um patch ou traduzir.
 
-> 🇺🇸 English version: see [CONTRIBUTING.en.md](CONTRIBUTING.en.md) (em breve).
-
 ---
 
 ## Sumário
@@ -39,7 +37,7 @@ Abra issue com o template `Bug report` e inclua:
 - **Versão** (`git rev-parse HEAD` ou tag) e plataforma (Docker / bare-metal Go).
 - **Passos para reproduzir** — mínimos, idealmente com `curl` ou screenshot.
 - **Esperado vs. observado.**
-- **Logs:** `docker compose logs backend --tail=200`, console do navegador, e (se rodando bare-metal) saída do processo.
+- **Logs:** `docker compose logs app --tail=200`, console do navegador, e (se rodando bare-metal) saída do processo.
 - **Ambiente:** SO, versão do Docker, versão do navegador, browser local OU host (LAN IP é gotcha conhecida — veja [docs/SECURITY.md](docs/SECURITY.md)).
 
 Não cole secrets/tokens/JWT em issues públicas. Sanitize.
@@ -66,7 +64,7 @@ O projeto é 100% open-source (AGPL-3.0) — não há edição paga. Features en
 |---|---|---|
 | Docker + Docker Compose v2 | 24+ | Stack inteira sobe por compose |
 | Go | 1.26+ | Backend |
-| Node.js | 20 LTS | Frontend + Landing |
+| Node.js | 22 LTS | Frontend |
 | Make (opcional) | — | Atalhos no `Makefile` |
 | golang-migrate (opcional) | v4 | Migrations manuais |
 
@@ -83,10 +81,9 @@ Acesse:
 
 | Serviço | URL |
 |---|---|
-| App (SPA + API via Nginx) | http://localhost:8090 |
+| App (SPA + API) | http://localhost:8090 |
 | Swagger (opt-in: `SWAGGER_ENABLED=true`) | http://localhost:8090/swagger |
 | Postgres (cliente local) | `127.0.0.1:5433` (use `docker exec finance-sh-postgres psql` ou DBeaver/TablePlus) |
-| Landing (dev) | `cd landing && npm run dev` → http://localhost:5174 (deploy externo; fora do compose) |
 
 Usuário demo (SEED=true): `demo@finance.sh` / `senha123`. Super-admin: `super@finance.sh` / `superadmin123`. Troque ambos no primeiro login.
 
@@ -129,7 +126,7 @@ Stack default = **2 containers** (postgres + app). Arquitetura completa: [docs/A
 ### Go (backend)
 
 - Formatação: `gofmt -s` obrigatório. CI rejeita diferença.
-- Lint: `golangci-lint run ./...`. Zero `// nolint` sem comentário explicando.
+- Lint: `go vet ./...` (o CI roda também gosec e CodeQL). Nenhum `// nolint` ou `// #nosec` sem comentário explicando.
 - Layout: Clean Architecture — handlers → services → repositories → entities. Sem cross-skip.
 - Erros: `fmt.Errorf("X: %w", err)` para wrap, `errors.Is/As` para check. Sem `panic` em código de produção.
 - Money: **sempre `int64` em centavos**. Nunca `float64` para valores monetários.
@@ -139,12 +136,12 @@ Stack default = **2 containers** (postgres + app). Arquitetura completa: [docs/A
 
 ### TypeScript (frontend)
 
-- Formatação: Prettier (`.prettierrc` do projeto).
-- Lint: ESLint + `@typescript-eslint`. Sem `any` salvo justificativa em comentário.
+- Lint: ESLint + `@typescript-eslint` (`npm run lint`, zero warnings). Sem `any`, salvo justificativa em comentário.
+- Formatação: siga o estilo do arquivo (não há formatter obrigatório).
 - Componentes: function components + hooks. Sem class components.
 - Estado: Zustand para global, React Query para server state, `useState`/`useReducer` para local.
 - Forms: React Hook Form + Zod para validação. Mensagens de erro em pt-BR (use i18n).
-- Estilo: Tailwind utility-first. Tokens em `tailwind.config.ts`. Sem CSS-in-JS.
+- Estilo: Tailwind utility-first. Tokens em `tailwind.config.js`. Sem CSS-in-JS.
 - Acessibilidade: `aria-*` quando relevante, foco visível, contraste AA mínimo.
 
 ### Naming
@@ -167,27 +164,18 @@ Stack default = **2 containers** (postgres + app). Arquitetura completa: [docs/A
 
 ```bash
 cd backend
-go test ./... -count=1 -race -short      # rápido (sem integration)
-go test ./... -count=1 -race             # full (sobe testcontainers de Postgres)
+go test ./... -count=1 -race -short      # o mesmo que o CI roda
 ```
 
-Cobertura alvo: novos services com lógica não-trivial **devem** ter teste de unidade. Repositories podem ser cobertos por integration. Handlers cobertos por end-to-end via `httptest`.
+Cobertura alvo: novos services com lógica não-trivial **devem** ter teste de unidade. Handlers podem ser cobertos via `httptest`.
 
 ### Frontend
 
 ```bash
 cd frontend
-npm run test            # vitest
-npm run test:ui         # interativo
-npm run lint            # ESLint + tsc --noEmit
-npm run build           # smoke build (TS strict)
-```
-
-### Landing
-
-```bash
-cd landing
-npm run build
+npm test                # Vitest
+npm run lint            # ESLint
+npm run build           # tsc (TS strict) + build do Vite
 ```
 
 PRs com testes quebrando **não são aceitos**. Use `git rebase` e corrija antes de pedir review.
@@ -226,7 +214,7 @@ fix(auth): JWT refresh não invalidava token revogado
 docs(contributing): adiciona seção sobre i18n
 ```
 
-Commits squashed no merge — você não precisa rebasear seu PR para 1 commit, mantenedor faz no merge.
+Você não precisa reduzir o PR a 1 commit: o mantenedor escolhe a forma de merge.
 
 ---
 
@@ -242,7 +230,7 @@ Commits squashed no merge — você não precisa rebasear seu PR para 1 commit, 
    - Link da issue: `Closes #123` ou `Refs #123`.
 6. CI precisa passar (build, test, lint). Se quebrar, push correção no mesmo branch.
 7. Review: pelo menos 1 mantenedor aprova. Pode pedir mudanças — não leve pro pessoal, é sobre código.
-8. Merge: estilo **squash and merge**. Histórico fica limpo.
+8. Merge: feito pelo mantenedor depois da aprovação e do CI verde.
 
 ### O que mantenedor procura
 
@@ -286,13 +274,13 @@ Implicações:
 
 ### DCO (Developer Certificate of Origin)
 
-Todo commit precisa ser **signed-off**:
+Pedimos que os commits sejam **signed-off**:
 
 ```bash
 git commit -s -m "feat(reports): exporta DRE em PDF"
 ```
 
-O `-s` adiciona `Signed-off-by: Seu Nome <seu@email>` no footer, atestando que você tem direito de contribuir o código sob a licença. Bot do CI verifica.
+O `-s` adiciona `Signed-off-by: Seu Nome <seu@email>` no footer, atestando que você tem direito de contribuir o código sob a licença.
 
 Sem CLA (Contributor License Agreement). DCO é suficiente.
 
