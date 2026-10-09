@@ -57,6 +57,8 @@ func writeServiceError(w http.ResponseWriter, err error) bool {
 		response.Error(w, http.StatusUnprocessableEntity, "invalid_recurrence", err.Error())
 	case errors.Is(err, services.ErrInvalidTransfer):
 		response.Error(w, http.StatusUnprocessableEntity, "invalid_transfer", err.Error())
+	case errors.Is(err, services.ErrInvalidInstallments):
+		response.Error(w, http.StatusUnprocessableEntity, "invalid_installments", err.Error())
 	case errors.Is(err, services.ErrInstallmentTooSmall):
 		response.Error(w, http.StatusUnprocessableEntity, "installment_too_small", err.Error())
 	case errors.Is(err, services.ErrTooManyRows):

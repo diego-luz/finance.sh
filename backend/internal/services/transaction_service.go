@@ -33,6 +33,13 @@ var ErrContactNotInOrg = errors.New("contato não pertence à organização")
 // source. Without one, Balances debited the source and credited nobody.
 var ErrInvalidTransfer = errors.New("transferência precisa de uma conta de destino diferente da de origem")
 
+// maxInstallments mirrors validate:"max=420" on TransactionRequest.Installments
+// (35 years of monthly parcels).
+const maxInstallments = 420
+
+// ErrInvalidInstallments: the number of installments is outside 1..420.
+var ErrInvalidInstallments = errors.New("número de parcelas deve estar entre 1 e 420")
+
 // ErrInstallmentTooSmall: fewer cents than installments would leave parcels of 0.
 var ErrInstallmentTooSmall = errors.New("valor menor que o número de parcelas")
 
@@ -201,6 +208,11 @@ func (s *TransactionService) createInstallmentGroup(orgID uuid.UUID, req dto.Tra
 	}
 
 	n := req.Installments
+	// The DTO already caps this at 420, but the service must not trust its
+	// caller for the size of an allocation (one parcel row each).
+	if n < 1 || n > maxInstallments {
+		return nil, ErrInvalidInstallments
+	}
 	if tmpl.Amount < int64(n) {
 		return nil, ErrInstallmentTooSmall
 	}
