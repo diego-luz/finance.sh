@@ -2,6 +2,9 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base32"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -30,7 +33,14 @@ var (
 	// DTO already enforces it via struct tags; this error guards the service
 	// boundary so other callers (tests, future entry points) cannot bypass it.
 	ErrWeakPassword = errors.New("senha muito fraca")
+	// ErrInvalidSetupToken is returned when the setup code is missing or wrong.
+	// Without it, whoever reached a fresh instance first became its owner.
+	ErrInvalidSetupToken = errors.New("código de instalação inválido")
 )
+
+// setupLockKey serialises concurrent Initialize calls (pg_advisory_xact_lock):
+// under READ COMMITTED the in-tx COUNT alone let two callers both see zero.
+const setupLockKey = 0x66696e616e6365 // "finance"
 
 // minSetupPasswordLen mirrors the validate:"min=8" tag on SetupUser.Password so
 // programmatic callers (not the HTTP layer) still get the same guard.
@@ -47,6 +57,9 @@ type SetupService struct {
 	users *repositories.UserRepository
 	cfg   *config.Config
 	db    *gorm.DB
+	// token is the setup code Initialize demands: SETUP_TOKEN, or a random one
+	// per boot that main prints to the log while the platform needs setup.
+	token string
 }
 
 func NewSetupService(
@@ -54,7 +67,39 @@ func NewSetupService(
 	cfg *config.Config,
 	db *gorm.DB,
 ) *SetupService {
-	return &SetupService{users: users, cfg: cfg, db: db}
+	token := normalizeSetupToken(cfg.SetupToken)
+	if token == "" {
+		token = newSetupToken()
+	}
+	return &SetupService{users: users, cfg: cfg, db: db, token: token}
+}
+
+// SetupToken is the code the wizard asks for; main prints it at boot while
+// the platform still needs setup.
+func (s *SetupService) SetupToken() string { return formatSetupToken(s.token) }
+
+// newSetupToken returns 80 random bits as 16 base32 characters.
+func newSetupToken() string {
+	b := make([]byte, 10)
+	if _, err := rand.Read(b); err != nil {
+		panic("setup: crypto/rand failed: " + err.Error())
+	}
+	return base32.StdEncoding.EncodeToString(b)
+}
+
+// normalizeSetupToken drops spaces and dashes and upper-cases, so the code can
+// be typed the way it is printed (ABCD-EFGH-...) or not.
+func normalizeSetupToken(v string) string {
+	return strings.ToUpper(strings.NewReplacer("-", "", " ", "").Replace(strings.TrimSpace(v)))
+}
+
+func formatSetupToken(v string) string {
+	var partes []string
+	for len(v) > 4 {
+		partes = append(partes, v[:4])
+		v = v[4:]
+	}
+	return strings.Join(append(partes, v), "-")
 }
 
 // NeedsSetup reports whether the platform still needs first-run initialization
@@ -74,6 +119,13 @@ func (s *SetupService) NeedsSetup(ctx context.Context) (bool, error) {
 // response so the frontend can reuse its auth store.
 func (s *SetupService) Initialize(req dto.SetupInitializeRequest, meta AuthMeta) (*dto.AuthResponse, error) {
 	ctx := context.Background()
+
+	// The wizard is public, so on a freshly exposed instance anyone could
+	// become its super-admin; the code from the boot log proves the caller
+	// can read the server.
+	if subtle.ConstantTimeCompare([]byte(normalizeSetupToken(req.SetupToken)), []byte(s.token)) != 1 {
+		return nil, ErrInvalidSetupToken
+	}
 
 	// Defensive: the DTO already validates these via struct tags, but a
 	// programmatic caller could bypass that. Re-check the bare minimum so the
@@ -114,6 +166,9 @@ func (s *SetupService) Initialize(req dto.SetupInitializeRequest, meta AuthMeta)
 		// Race-condition guard: re-check inside the tx that no users exist.
 		// Without this, two concurrent callers could both pass the public
 		// NeedsSetup check and both succeed.
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", setupLockKey).Error; err != nil {
+			return fmt.Errorf("setup: lock: %w", err)
+		}
 		var n int64
 		if err := tx.Model(&entities.User{}).Count(&n).Error; err != nil {
 			return fmt.Errorf("setup: count in tx: %w", err)

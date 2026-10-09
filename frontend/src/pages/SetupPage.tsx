@@ -17,6 +17,7 @@ import {
   Sparkles,
   Rocket,
   CircleCheck,
+  KeyRound,
 } from 'lucide-react';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { Button, Input } from '@/components/ui';
@@ -41,6 +42,7 @@ const currencyCodes = SUPPORTED_CURRENCIES.map((c) => c.code) as [
 // ---------------------------------------------------------------------------
 const userStepSchema = z
   .object({
+    setup_token: z.string().trim().min(1, 'setup.errors.setupTokenRequired'),
     name: z.string().min(2, 'auth.errors.nameMin'),
     email: z.string().min(1, 'auth.errors.emailRequired').email('auth.errors.emailInvalid'),
     password: z.string().min(8, 'auth.errors.passwordMin'),
@@ -58,6 +60,7 @@ const orgStepSchema = z.object({
 
 const fullSchema = z
   .object({
+    setup_token: z.string().trim().min(1),
     name: z.string().min(2),
     email: z.string().email(),
     password: z.string().min(8),
@@ -132,6 +135,7 @@ export function SetupPage() {
   } = useForm<FormValues>({
     resolver: zodResolver(fullSchema),
     defaultValues: {
+      setup_token: '',
       name: '',
       email: '',
       password: '',
@@ -176,13 +180,14 @@ export function SetupPage() {
       // Run partial validation against the user step schema so we don't
       // surface organization-step errors prematurely.
       const partial = userStepSchema.safeParse({
+        setup_token: values.setup_token,
         name: values.name,
         email: values.email,
         password: values.password,
         confirm_password: values.confirm_password,
       });
       // Always trigger RHF so the inline error messages render.
-      const ok = await trigger(['name', 'email', 'password', 'confirm_password']);
+      const ok = await trigger(['setup_token', 'name', 'email', 'password', 'confirm_password']);
       if (!ok || !partial.success) return;
       setStep(2);
       return;
@@ -212,9 +217,16 @@ export function SetupPage() {
       {
         user: { name: v.name, email: v.email, password: v.password },
         organization: { name: v.organization_name, currency: v.currency },
+        setup_token: v.setup_token,
       },
       {
         onError: (err: ApiRequestError) => {
+          if (err.status === 403) {
+            // wrong or stale code (it changes on every restart): back to step 1
+            toast.error(t('setup.errors.invalid_setup_token'));
+            setStep(1);
+            return;
+          }
           if (err.status === 409) {
             toast.error(t('setup.errors.already_initialized'));
             navigate('/login', { replace: true });
@@ -239,6 +251,16 @@ export function SetupPage() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         {step === 1 && (
           <>
+            <Input
+              label={t('setup.steps.user.fields.setupToken')}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="XXXX-XXXX-XXXX-XXXX"
+              leftIcon={<KeyRound className="h-4 w-4" />}
+              error={fieldError(errors.setup_token?.message)}
+              hint={t('setup.steps.user.setupTokenHint')}
+              {...register('setup_token')}
+            />
             <Input
               label={t('setup.steps.user.fields.name')}
               autoComplete="name"

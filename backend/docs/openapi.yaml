@@ -2612,9 +2612,13 @@ components:
 
     SetupInitializeRequest:
       type: object
-      required: [name, email, password, organization_name]
+      required: [name, email, password, organization_name, setup_token]
       description: Dados do primeiro super-admin + organização (first-boot).
       properties:
+        setup_token:
+          type: string
+          maxLength: 64
+          description: "Código de instalação impresso no log do servidor ao iniciar (ou SETUP_TOKEN). Sem ele: 403 invalid_setup_token."
         name: { type: string, minLength: 2, maxLength: 120 }
         email: { type: string, format: email }
         password: { type: string, minLength: 8, maxLength: 72 }

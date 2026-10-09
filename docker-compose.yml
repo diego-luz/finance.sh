@@ -103,6 +103,8 @@ services:
       # Primeiro acesso. Default false = setup wizard (você cria o admin pela web,
       # seguro). true = deploy headless: cria admin no boot e loga a senha gerada.
       BOOTSTRAP_ADMIN: ${BOOTSTRAP_ADMIN:-false}
+      # código que o wizard pede; vazio = um novo por boot, impresso no log
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@finance.sh}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_ORG_NAME: ${ADMIN_ORG_NAME:-Minha Organização}

@@ -357,11 +357,19 @@ Vite (`5173`) faz proxy de `/api` pra `http://localhost:8090`. Postgres em `5433
 
 No **primeiro acesso com banco vazio**, a app mostra o **setup wizard**: um formulário onde **você cria** o primeiro super-admin (nome, e-mail, senha) e a organização. Nenhum segredo é exibido — você define a senha. É o padrão (`BOOTSTRAP_ADMIN=false`, default), seguro pra acesso web.
 
-1. Suba a stack e abra **http://127.0.0.1:8090**.
-2. Banco vazio → cai automaticamente em **/setup**.
-3. Preencha admin + organização → pronto, já entra logado.
+1. Suba a stack e pegue o **código de instalação** no log: `docker compose logs app`.
+2. Abra **http://127.0.0.1:8090**. Banco vazio → cai automaticamente em **/setup**.
+3. Informe o código, preencha admin + organização → pronto, já entra logado.
 
-Protegido server-side por `users-count == 0` em transação (só roda uma vez; ninguém recria o admin depois).
+```
+┌────────────────────────────────────────────────────────────┐
+│ PRIMEIRO ACESSO — código de instalação                     │
+│                                                            │
+│   K7QM-2XRA-PZ4W-ND6T  (novo a cada reinício)              │
+└────────────────────────────────────────────────────────────┘
+```
+
+O código prova que quem está no navegador também tem acesso ao servidor: sem ele, quem chegasse primeiro a uma instância recém-exposta viraria o super-admin. Ele muda a cada reinício; para fixá-lo (deploy automatizado), defina `SETUP_TOKEN`. Protegido também server-side por `users-count == 0` em transação com lock (só roda uma vez; ninguém recria o admin depois, nem duas chamadas simultâneas criam dois).
 
 > **Não há "admin separado".** O usuário que você cria no wizard **já é o admin**: é o **super-admin da plataforma** (acessa o back-office `/admin`) **e** o **dono (owner)** da primeira organização. Uma conta só, com as duas capacidades. As contas `super@finance.sh` / `admin@finance.sh` que aparecem por aí são apenas **seed de dev** (`SEED=true`) e **bootstrap headless** (`BOOTSTRAP_ADMIN=true`) — não existem no deploy real.
 
@@ -425,6 +433,7 @@ Todas em [`.env.example`](.env.example). Resumo:
 | `SWAGGER_ENABLED` | `true` | Expor Swagger UI. **`false` em produção.** |
 | `FRONTEND_URL` | `http://localhost:8090` | URL pública da SPA (links de e-mail, CORS). |
 | `BOOTSTRAP_ADMIN` | `false` | `false` = setup wizard no 1º acesso (você cria o admin pela web). `true` = cria admin no boot e loga a senha (deploy headless). |
+| `SETUP_TOKEN` | — | Código que o setup wizard pede. Vazio = um aleatório por boot, impresso no log enquanto não há usuário. |
 | `ADMIN_EMAIL` | `admin@finance.sh` | E-mail do admin criado no 1º boot. |
 | `ADMIN_PASSWORD` | _(vazio)_ | Senha do admin. Vazio = gera aleatória e loga no boot. Sempre forçada a trocar no 1º login. |
 | `ADMIN_ORG_NAME` | `Minha Organização` | Nome da organização criada com o admin. |
