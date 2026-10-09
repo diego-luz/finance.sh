@@ -8,9 +8,9 @@ import type {
 /** Authenticated 2FA management (settings flows). */
 export const twoFactorService = {
   /** Begins enrollment: returns a TOTP secret + otpauth:// URL for the QR. */
-  setup: () =>
+  setup: (password: string) =>
     unwrap<TwoFactorSetupResponse>(
-      api.post<ApiEnvelope<TwoFactorSetupResponse>>('/me/2fa/setup'),
+      api.post<ApiEnvelope<TwoFactorSetupResponse>>('/me/2fa/setup', { password }),
     ),
 
   /** Confirms enrollment with a current code; returns recovery codes. */

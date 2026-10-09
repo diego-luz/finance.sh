@@ -294,8 +294,10 @@
           "name": "Your name",
           "email": "Email",
           "password": "Password",
-          "confirmPassword": "Confirm password"
-        }
+          "confirmPassword": "Confirm password",
+          "setupToken": "Setup code"
+        },
+        "setupTokenHint": "Printed in the server log at startup: docker compose logs app"
       },
       "org": {
         "title": "Organization",
@@ -328,7 +330,9 @@
       "invalid_currency": "Invalid currency.",
       "generic": "Could not complete setup. Please try again.",
       "emptyPassword": "Fill or generate a password before copying.",
-      "copyFailed": "Couldn't copy. Please select and copy manually."
+      "copyFailed": "Couldn't copy. Please select and copy manually.",
+      "setupTokenRequired": "Enter the setup code",
+      "invalid_setup_token": "Invalid setup code. Check the server log (docker compose logs app); it changes on every restart."
     }
   }
 }

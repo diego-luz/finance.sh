@@ -85,3 +85,17 @@ func TestNilLimiterIsSafe(t *testing.T) {
 	assert.False(t, l.RegisterFailure(ctx, "x@finance.sh"))
 	assert.NotPanics(t, func() { l.Reset(ctx, "x@finance.sh") })
 }
+
+func TestResetPrefixAndPerIPKeys(t *testing.T) {
+	l := lockout.New(2, 15)
+	ctx := context.Background()
+	l.RegisterFailure(ctx, "a@x|1.1.1.1")
+	l.RegisterFailure(ctx, "a@x|1.1.1.1")
+	assert.True(t, l.Locked(ctx, "a@x|1.1.1.1"))
+	assert.False(t, l.Locked(ctx, "a@x|2.2.2.2"), "another IP is not locked")
+	l.RegisterFailure(ctx, "b@x|1.1.1.1")
+	l.ResetPrefix(ctx, "a@x|")
+	assert.False(t, l.Locked(ctx, "a@x|1.1.1.1"))
+	// b@x kept its first failure: one more locks it
+	assert.True(t, l.RegisterFailure(ctx, "b@x|1.1.1.1"), "other e-mails untouched")
+}

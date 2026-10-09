@@ -267,6 +267,38 @@ func (s *CategorizationService) Match(orgID uuid.UUID, description, txType strin
 	return nil, "none"
 }
 
+// Matcher categorizes many descriptions of one org: the rules are loaded once
+// and the history lookup is remembered per token set (a statement repeats the
+// same merchants). Match per row reloaded the rules and ran the history query
+// for every line, two queries per row of an import.
+type Matcher struct {
+	s     *CategorizationService
+	orgID uuid.UUID
+	rules []compiledRule
+	memo  map[string]*uuid.UUID
+}
+
+// NewMatcher prepares a Matcher; a failure to load the rules leaves only the
+// history fallback, as Match does.
+func (s *CategorizationService) NewMatcher(orgID uuid.UUID) *Matcher {
+	rules, _ := s.loadRules(orgID)
+	return &Matcher{s: s, orgID: orgID, rules: rules, memo: map[string]*uuid.UUID{}}
+}
+
+// Match is CategorizationService.Match for the Matcher's org, without the source.
+func (m *Matcher) Match(description, txType string) *uuid.UUID {
+	if id := matchWith(m.rules, description, txType); id != nil {
+		return id
+	}
+	key := txType + "|" + strings.Join(significantTokens(description), " ")
+	if id, ok := m.memo[key]; ok {
+		return id
+	}
+	id := m.s.historyMatch(m.orgID, description, txType)
+	m.memo[key] = id
+	return id
+}
+
 // historyMatch runs the history fallback for a single description.
 func (s *CategorizationService) historyMatch(orgID uuid.UUID, description, txType string) *uuid.UUID {
 	tokens := significantTokens(description)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"regexp"
 	"strings"
 	"time"
@@ -41,6 +42,9 @@ var (
 	ErrAccountLocked      = errors.New("conta temporariamente bloqueada por excesso de tentativas")
 	ErrInvalidCode        = errors.New("código de verificação inválido")
 	Err2FANotPending      = errors.New("configure o 2FA antes de ativá-lo")
+	// Err2FAAlreadyEnabled is returned by SetupTwoFactor when 2FA is on: a new
+	// secret would switch it off without the code that /me/2fa/disable demands.
+	Err2FAAlreadyEnabled = errors.New("o 2FA já está ativo; desative-o com um código antes de configurar de novo")
 	// ErrAccountDisabled is returned at login when a platform super-admin has
 	// disabled the user's account. Maps to 403.
 	ErrAccountDisabled = errors.New("Conta desativada. Contate o administrador.")
@@ -194,20 +198,31 @@ func (s *AuthService) sendVerificationEmail(user *entities.User) {
 func (s *AuthService) Login(req dto.LoginRequest, meta AuthMeta) (*dto.LoginResult, error) {
 	ctx := context.Background()
 	email := strings.ToLower(strings.TrimSpace(req.Email))
+	// Counted per e-mail AND IP: keyed by e-mail alone, anyone who knew an
+	// address kept that account locked forever (one try every few minutes)
+	// and, since the same budget guards password changes, blocked those too.
+	key := loginLockKey(email, meta.IP)
 
-	if s.lockout.Locked(ctx, email) {
+	if s.lockout.Locked(ctx, key) {
 		return nil, ErrAccountLocked
 	}
 
 	user, err := s.users.FindByEmail(email)
 	if err != nil {
-		// Count the failure even for unknown emails to avoid user enumeration.
-		s.lockout.RegisterFailure(ctx, email)
+		// An unknown e-mail must look exactly like a wrong password: the same
+		// bcrypt work (otherwise it answers in ~1 ms instead of ~60) and the
+		// same lockout answer once the budget is spent (it used to stay 401
+		// while a real account turned 423).
+		hash.Check(dummyPasswordHash, req.Password)
+		locked := s.lockout.RegisterFailure(ctx, key)
 		slog.Info("login failed", "email", logger.MaskEmail(email), "reason", "unknown_user")
+		if locked {
+			return nil, ErrAccountLocked
+		}
 		return nil, ErrInvalidCredentials
 	}
 	if !hash.Check(user.PasswordHash, req.Password) {
-		locked := s.lockout.RegisterFailure(ctx, email)
+		locked := s.lockout.RegisterFailure(ctx, key)
 		slog.Info("login failed", "email", logger.MaskEmail(email), "reason", "bad_password", "locked", locked)
 		if locked {
 			return nil, ErrAccountLocked
@@ -219,7 +234,7 @@ func (s *AuthService) Login(req dto.LoginRequest, meta AuthMeta) (*dto.LoginResu
 	// valid credentials. Reset the failure counter (the password was correct) so
 	// the account is not also lockout-throttled on top of being disabled.
 	if user.Disabled {
-		s.lockout.Reset(ctx, email)
+		s.lockout.Reset(ctx, key)
 		slog.Info("login blocked", "email", logger.MaskEmail(email), "reason", "disabled")
 		return nil, ErrAccountDisabled
 	}
@@ -245,7 +260,7 @@ func (s *AuthService) Login(req dto.LoginRequest, meta AuthMeta) (*dto.LoginResu
 	}
 
 	// Full login succeeded (no 2FA): reset the failure counter.
-	s.lockout.Reset(ctx, email)
+	s.lockout.Reset(ctx, key)
 	return &dto.LoginResult{Auth: auth}, nil
 }
 
@@ -269,11 +284,26 @@ func (s *AuthService) LockoutMinutes() int {
 // returns a fresh pair of tokens.
 func (s *AuthService) Refresh(rawToken string, meta AuthMeta) (*dto.AuthResponse, error) {
 	tokenHash := hash.SHA256(rawToken)
-	stored, err := s.users.FindRefreshToken(tokenHash)
+	stored, err := s.users.FindRefreshTokenAny(tokenHash)
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
-	if stored.Revoked || time.Now().After(stored.ExpiresAt) {
+	familia := stored.FamilyID
+	if familia == uuid.Nil {
+		familia = stored.ID
+	}
+	if stored.Revoked {
+		// A rotated token showing up again means two parties hold it: the
+		// owner and whoever copied it. Revoke the whole session so the copy
+		// dies too. A short grace covers two tabs refreshing at the same time.
+		if stored.RevokedAt == nil || time.Since(*stored.RevokedAt) > refreshReuseGrace {
+			_ = s.users.RevokeRefreshFamily(familia)
+			slog.Warn("refresh token reuse: session revoked", "user_id", stored.UserID, "ip", meta.IP)
+		}
+		return nil, ErrInvalidToken
+	}
+	now := time.Now()
+	if now.After(stored.ExpiresAt) || (stored.SessionExpiresAt != nil && now.After(*stored.SessionExpiresAt)) {
 		return nil, ErrInvalidToken
 	}
 
@@ -281,18 +311,80 @@ func (s *AuthService) Refresh(rawToken string, meta AuthMeta) (*dto.AuthResponse
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
+	if user.Disabled {
+		_ = s.users.RevokeRefreshFamily(familia)
+		return nil, ErrInvalidToken
+	}
 
-	// Rotate: invalidate the presented token before issuing a new one.
-	if err := s.users.RevokeRefreshToken(stored.ID); err != nil {
+	// Rotate: claim the presented token before issuing a new one; a concurrent
+	// refresh that lost the claim gets nothing.
+	ok, err := s.users.ClaimRefreshToken(stored.ID)
+	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return nil, ErrInvalidToken
 	}
 
 	org, role, err := s.primaryOrg(user.ID)
 	if err != nil {
 		return nil, err
 	}
-	return s.issueTokens(user, org, role, meta)
+	fim := now.Add(s.cfg.JWT.SessionMaxAge)
+	if stored.SessionExpiresAt != nil {
+		fim = *stored.SessionExpiresAt
+	}
+	return s.issueTokensIn(user, org, role, meta, familia, fim)
 }
+
+// dummyPasswordHash is a bcrypt hash (default cost) of a random string, compared
+// against when the e-mail does not exist so both paths cost the same.
+var dummyPasswordHash = func() string {
+	h, err := hash.Password(uuid.NewString())
+	if err != nil {
+		panic(err)
+	}
+	return h
+}()
+
+// loginLockKey is the lockout key of a login attempt: e-mail and client IP.
+func loginLockKey(email, ip string) string {
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		ip = host // an untrusted peer still carries its port
+	}
+	return email + "|" + ip
+}
+
+// accountLockKey is the lockout key for re-checking a logged-in user's password.
+func accountLockKey(id uuid.UUID) string { return "conta:" + id.String() }
+
+// checkPasswordLimited verifies a logged-in user's current password under the
+// same per-account attempt budget as login. Without it, a stolen access token
+// could guess the password through change-password or account deletion with no
+// lockout at all, then change it and revoke the owner's sessions.
+func checkPasswordLimited(lim *lockout.Limiter, user *entities.User, password string) error {
+	ctx := context.Background()
+	// its own key, apart from login: whoever only knows the e-mail cannot
+	// lock the owner out of changing the password or deleting the account
+	key := accountLockKey(user.ID)
+	if lim != nil && lim.Locked(ctx, key) {
+		return ErrAccountLocked
+	}
+	if !hash.Check(user.PasswordHash, password) {
+		if lim != nil {
+			lim.RegisterFailure(ctx, key)
+		}
+		return ErrWrongPassword
+	}
+	if lim != nil {
+		lim.Reset(ctx, key)
+	}
+	return nil
+}
+
+// refreshReuseGrace is how recently a token may have been rotated and still be
+// presented again without being taken as theft (two tabs refreshing at once).
+const refreshReuseGrace = 30 * time.Second
 
 // MailEnabled reports whether SMTP is configured (real e-mail delivery). When
 // false, password-reset links are written to the server log instead. Used by the
@@ -350,8 +442,8 @@ func (s *AuthService) ChangePassword(userID uuid.UUID, currentPassword, newPassw
 	if err != nil {
 		return ErrUserNotFound
 	}
-	if !hash.Check(user.PasswordHash, currentPassword) {
-		return ErrWrongPassword
+	if err := checkPasswordLimited(s.lockout, user, currentPassword); err != nil {
+		return err
 	}
 
 	newHash, err := hash.Password(newPassword)
@@ -405,6 +497,14 @@ func (s *AuthService) ResetPassword(rawToken, newPassword string) error {
 			return ErrInvalidToken
 		}
 		return err
+	}
+	// a fresh password unlocks the account everywhere
+	if pr, err := s.resets.FindByTokenHash(tokenHash); err == nil {
+		if user, err := s.users.FindByID(pr.UserID); err == nil {
+			ctx := context.Background()
+			s.lockout.ResetPrefix(ctx, strings.ToLower(strings.TrimSpace(user.Email))+"|")
+			s.lockout.Reset(ctx, accountLockKey(user.ID))
+		}
 	}
 	return nil
 }
@@ -520,10 +620,22 @@ func (s *AuthService) ResendVerification(email string) {
 
 // SetupTwoFactor generates a fresh TOTP secret (issuer "finance.sh", account=email),
 // stores it as pending (2FA not yet enabled) and returns the secret + otpauth URL.
-func (s *AuthService) SetupTwoFactor(userID uuid.UUID) (*dto.TwoFactorSetupResponse, error) {
+func (s *AuthService) SetupTwoFactor(userID uuid.UUID, password string) (*dto.TwoFactorSetupResponse, error) {
 	user, err := s.users.FindByID(userID)
 	if err != nil {
 		return nil, ErrUserNotFound
+	}
+	// Re-running setup replaces the secret and turns 2FA off, so with a stolen
+	// access token alone it would strip the victim's second factor. Turning it
+	// off goes through DisableTwoFactor, which asks for a valid code.
+	if user.TwoFactorEnabled {
+		return nil, Err2FAAlreadyEnabled
+	}
+	// The password, not just a session: with only a stolen access token an
+	// attacker could enroll their own authenticator and lock the owner out at
+	// the next login.
+	if err := checkPasswordLimited(s.lockout, user, password); err != nil {
+		return nil, err
 	}
 	secret, url, err := totp.Generate("finance.sh", user.Email)
 	if err != nil {
@@ -550,8 +662,13 @@ func (s *AuthService) EnableTwoFactor(userID uuid.UUID, code string) (*dto.TwoFa
 	if secret == "" {
 		return nil, Err2FANotPending
 	}
-	if !totp.Validate(strings.TrimSpace(code), secret) {
+	passo, ok := totp.ValidateStep(code, secret, time.Now())
+	if !ok {
 		return nil, ErrInvalidCode
+	}
+	// the code that turned 2FA on cannot also open the next login
+	if _, err := s.users.ClaimTOTPStep(userID, passo); err != nil {
+		return nil, err
 	}
 
 	codes, err := totp.RecoveryCodes(recoveryCodeCount)
@@ -615,11 +732,12 @@ func (s *AuthService) VerifyTwoFactorLogin(req dto.TwoFactorVerifyRequest, meta 
 	// Brute-force protection for the second factor: reuse the login lockout keyed
 	// by the user's email so it shares the budget with the password stage.
 	email := strings.ToLower(strings.TrimSpace(user.Email))
-	if s.lockout.Locked(ctx, email) {
+	key := loginLockKey(email, meta.IP)
+	if s.lockout.Locked(ctx, key) {
 		return nil, ErrAccountLocked
 	}
 	if !s.checkSecondFactor(user, strings.TrimSpace(req.Code)) {
-		if locked := s.lockout.RegisterFailure(ctx, email); locked {
+		if locked := s.lockout.RegisterFailure(ctx, key); locked {
 			return nil, ErrAccountLocked
 		}
 		return nil, ErrInvalidCode
@@ -635,7 +753,7 @@ func (s *AuthService) VerifyTwoFactorLogin(req dto.TwoFactorVerifyRequest, meta 
 	}
 
 	// Full login succeeded: reset the failure counter.
-	s.lockout.Reset(ctx, email)
+	s.lockout.Reset(ctx, key)
 	return auth, nil
 }
 
@@ -645,15 +763,19 @@ func (s *AuthService) checkSecondFactor(user *entities.User, code string) bool {
 	if code == "" {
 		return false
 	}
-	if secret := user.TwoFactorSecret.String(); secret != "" && totp.Validate(code, secret) {
-		return true
+	if secret := user.TwoFactorSecret.String(); secret != "" {
+		if passo, ok := totp.ValidateStep(code, secret, time.Now()); ok {
+			// each 30-second code is good once
+			aceito, err := s.users.ClaimTOTPStep(user.ID, passo)
+			return err == nil && aceito
+		}
 	}
 	rc, err := s.users.FindRecoveryCode(user.ID, hash.SHA256(code))
 	if err != nil {
 		return false
 	}
-	_ = s.users.UseRecoveryCode(rc.ID)
-	return true
+	usado, err := s.users.UseRecoveryCode(rc.ID)
+	return err == nil && usado
 }
 
 // primaryOrg returns the user's first membership organization (used right after
@@ -673,6 +795,14 @@ func (s *AuthService) primaryOrg(userID uuid.UUID) (*entities.Organization, enti
 }
 
 func (s *AuthService) issueTokens(user *entities.User, org *entities.Organization, role entities.Role, meta AuthMeta) (*dto.AuthResponse, error) {
+	// a fresh login opens a new session family with its own absolute deadline
+	return s.issueTokensIn(user, org, role, meta, uuid.New(), time.Now().Add(s.cfg.JWT.SessionMaxAge))
+}
+
+// issueTokensIn issues an access token and a refresh token belonging to the
+// given session family; the refresh token never outlives the session.
+func (s *AuthService) issueTokensIn(user *entities.User, org *entities.Organization, role entities.Role, meta AuthMeta,
+	familia uuid.UUID, fimSessao time.Time) (*dto.AuthResponse, error) {
 	access, err := jwt.Generate(user.ID.String(), user.Email, s.cfg.JWT.AccessSecret, s.cfg.JWT.AccessTTL)
 	if err != nil {
 		return nil, err
@@ -682,12 +812,18 @@ func (s *AuthService) issueTokens(user *entities.User, org *entities.Organizatio
 	if err != nil {
 		return nil, err
 	}
+	expira := time.Now().Add(s.cfg.JWT.RefreshTTL)
+	if expira.After(fimSessao) {
+		expira = fimSessao
+	}
 	rt := &entities.RefreshToken{
-		UserID:    user.ID,
-		TokenHash: hash.SHA256(raw),
-		ExpiresAt: time.Now().Add(s.cfg.JWT.RefreshTTL),
-		UserAgent: meta.UserAgent,
-		IP:        meta.IP,
+		UserID:           user.ID,
+		TokenHash:        hash.SHA256(raw),
+		ExpiresAt:        expira,
+		UserAgent:        meta.UserAgent,
+		IP:               meta.IP,
+		FamilyID:         familia,
+		SessionExpiresAt: &fimSessao,
 	}
 	if err := s.users.SaveRefreshToken(rt); err != nil {
 		return nil, err

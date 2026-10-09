@@ -706,12 +706,13 @@ type InvitationRequest struct {
 }
 
 type InvitationDTO struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	Accepted  bool      `json:"accepted"`
-	Token     string    `json:"token,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `json:"id"`
+	Email     string     `json:"email"`
+	Role      string     `json:"role"`
+	Accepted  bool       `json:"accepted"`
+	Token     string     `json:"token,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 type AcceptInvitationRequest struct {
@@ -770,6 +771,12 @@ type TwoFactorSetupResponse struct {
 }
 
 // TwoFactorCodeRequest carries a 6-digit TOTP (used for enable/disable).
+// TwoFactorSetupRequest starts 2FA enrollment; the current password is
+// required so a stolen session alone cannot enroll the attacker's device.
+type TwoFactorSetupRequest struct {
+	Password string `json:"password" validate:"required,max=72"`
+}
+
 type TwoFactorCodeRequest struct {
 	Code string `json:"code" validate:"required"`
 }
@@ -914,6 +921,8 @@ type SetupOrganization struct {
 type SetupInitializeRequest struct {
 	User         SetupUser         `json:"user" validate:"required"`
 	Organization SetupOrganization `json:"organization" validate:"required"`
+	// SetupToken is the code printed in the server log at boot (or SETUP_TOKEN).
+	SetupToken string `json:"setup_token" validate:"required,max=64"`
 }
 
 // ----- Global search -----

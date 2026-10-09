@@ -1,3 +1,4 @@
+import { authStore } from '@/stores/authStore';
 import { api, unwrap } from '@/lib/axios';
 import type {
   ApiEnvelope,
@@ -41,8 +42,14 @@ export const authService = {
    * Forced/self-service password change for the authenticated user. Backend
    * clears `must_change_password` and revokes all other sessions on success.
    */
+  // keep_refresh_token keeps THIS session: without it the backend revokes every
+  // session including the current one, and the user was thrown out minutes
+  // after a (forced) password change.
   changePassword: (payload: ChangePasswordPayload) =>
-    api.post<ApiEnvelope<unknown>>('/me/change-password', payload),
+    api.post<ApiEnvelope<unknown>>('/me/change-password', {
+      ...payload,
+      keep_refresh_token: authStore.getRefreshToken() ?? undefined,
+    }),
 
   verifyEmail: (token: string) =>
     api.post<ApiEnvelope<unknown>>('/auth/verify-email', { token }),

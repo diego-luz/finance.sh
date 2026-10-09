@@ -326,6 +326,16 @@ func RateLimit(rpm int) func(http.Handler) http.Handler {
 	)
 }
 
+// NoStore marks API responses as not cacheable: statements, CSV/XLSX/PDF
+// exports and receipts were otherwise free to land in the browser's disk
+// cache or a shared proxy.
+func NoStore(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Logger emits a structured slog line per request with method, path, status and
 // latency, tagged with the chi request ID.
 func Logger(log *slog.Logger) func(http.Handler) http.Handler {

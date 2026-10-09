@@ -57,14 +57,19 @@ func NewRouter(d Deps) *chi.Mux {
 	// Global middleware: request id, real client IP, panic recovery, structured
 	// logging, CORS and per-IP rate limiting.
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	// the client IP from X-Forwarded-For only when a trusted proxy sent it;
+	// chi's middleware.RealIP believed it from anyone (see middlewares.RealIP)
+	trusted := d.Config.TrustedProxies
+	if len(trusted) == 0 {
+		trusted = middlewares.DefaultTrustedProxies
+	}
+	r.Use(middlewares.RealIP(middlewares.ParseTrustedProxies(trusted)))
 	r.Use(middleware.Recoverer)
 	r.Use(middlewares.Logger(d.Logger))
 	// Security headers (CSP, X-Frame-Options, nosniff, ...) applied to every
 	// response, since the binary serves the SPA directly.
 	r.Use(middlewares.SecurityHeaders)
 	r.Use(middlewares.CORS(d.Config))
-	r.Use(middlewares.RateLimit(d.Config.RateLimitRPM))
 
 	health := NewHealthHandler()
 	auth := NewAuthHandler(d.Auth)
@@ -101,22 +106,37 @@ func NewRouter(d Deps) *chi.Mux {
 	r.Get("/health", health.Health)
 
 	r.Route("/api/v1", func(r chi.Router) {
+		// Per-IP budget for the API only: counted on every request it was also
+		// spent by the SPA's ~30 lazy chunks, fonts and the service-worker
+		// precache, and a 429 there kept the PWA from installing.
+		r.Use(middlewares.RateLimit(d.Config.RateLimitRPM))
+		r.Use(middlewares.NoStore)
 		// Public
 		r.Get("/health", health.Health)
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/register", auth.Register)
-			r.Post("/login", auth.Login)
+			// Session upkeep stays on the general budget: a 429 on refresh is
+			// not a reason to spend the tight one below, and several people
+			// behind one NAT refresh every ~15 min.
 			r.Post("/refresh", auth.Refresh)
 			r.Post("/logout", auth.Logout)
-			r.Post("/forgot-password", auth.ForgotPassword)
-			r.Post("/reset-password", auth.ResetPassword)
-			// Email verification (soft) and 2FA login completion are public.
-			r.Post("/verify-email", auth.VerifyEmail)
-			r.Post("/verify-email/resend", auth.ResendVerification)
-			r.Post("/2fa/verify", auth.VerifyTwoFactor)
 			// Public flag so the SPA can hide the signup UI when self-service
 			// registration is disabled.
 			r.Get("/registration-open", auth.RegistrationOpen)
+
+			// Credential guessing and e-mail sending get their own, tighter
+			// per-IP budget: login is locked per e-mail and IP, so one IP
+			// trying a password on many accounts is only stopped here.
+			r.Group(func(r chi.Router) {
+				r.Use(middlewares.RateLimit(d.Config.AuthRateLimitRPM))
+				r.Post("/register", auth.Register)
+				r.Post("/login", auth.Login)
+				r.Post("/forgot-password", auth.ForgotPassword)
+				r.Post("/reset-password", auth.ResetPassword)
+				// Email verification (soft) and 2FA login completion are public.
+				r.Post("/verify-email", auth.VerifyEmail)
+				r.Post("/verify-email/resend", auth.ResendVerification)
+				r.Post("/2fa/verify", auth.VerifyTwoFactor)
+			})
 		})
 
 		// First-run setup wizard. PUBLIC (no auth, no tenant): the SPA's bootstrap
@@ -125,7 +145,7 @@ func NewRouter(d Deps) *chi.Mux {
 		// server-side by an in-transaction users-count == 0 check.
 		r.Route("/setup", func(r chi.Router) {
 			r.Get("/status", setup.Status)
-			r.Post("/initialize", setup.Initialize)
+			r.With(middlewares.RateLimit(d.Config.AuthRateLimitRPM)).Post("/initialize", setup.Initialize)
 		})
 
 		// Platform back-office (super-admin). PLATFORM-level, NOT tenant-scoped:
@@ -133,6 +153,7 @@ func NewRouter(d Deps) *chi.Mux {
 		// RequireSuperAdmin (loads the user and 403s unless User.SuperAdmin).
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(middlewares.Auth(d.Config))
+			r.Use(middlewares.AccountGate(d.Users))
 			r.Use(middlewares.RequireSuperAdmin(d.Users))
 
 			r.Get("/stats", admin.Stats)
@@ -155,6 +176,7 @@ func NewRouter(d Deps) *chi.Mux {
 		// scoped, so they live here too.
 		r.Group(func(r chi.Router) {
 			r.Use(middlewares.Auth(d.Config))
+			r.Use(middlewares.AccountGate(d.Users))
 			r.Post("/invitations/accept", members.AcceptInvitation)
 
 			// Two-factor management.
@@ -185,6 +207,7 @@ func NewRouter(d Deps) *chi.Mux {
 		// Protected: requires a valid access token and an active tenant.
 		r.Group(func(r chi.Router) {
 			r.Use(middlewares.Auth(d.Config))
+			r.Use(middlewares.AccountGate(d.Users))
 			r.Use(middlewares.Tenant(d.Users))
 			r.Use(middlewares.Audit(d.DB))
 

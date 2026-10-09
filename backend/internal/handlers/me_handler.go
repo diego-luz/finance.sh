@@ -27,11 +27,28 @@ func NewMeHandler(auth *services.AuthService, lgpd *services.LGPDService) *MeHan
 
 // SetupTwoFactor POST /me/2fa/setup
 func (h *MeHandler) SetupTwoFactor(w http.ResponseWriter, r *http.Request) {
+	var req dto.TwoFactorSetupRequest
+	if fields, err := validator.BindJSON(r, &req); err != nil || len(fields) > 0 {
+		response.ValidationError(w, fields)
+		return
+	}
 	userID := middlewares.UserID(r.Context())
-	res, err := h.auth.SetupTwoFactor(userID)
+	res, err := h.auth.SetupTwoFactor(userID, req.Password)
 	if err != nil {
+		if errors.Is(err, services.ErrWrongPassword) {
+			response.Error(w, http.StatusUnauthorized, "wrong_password", "Senha incorreta")
+			return
+		}
+		if errors.Is(err, services.ErrAccountLocked) {
+			response.Error(w, http.StatusLocked, "account_locked", err.Error())
+			return
+		}
 		if errors.Is(err, services.ErrUserNotFound) {
 			response.Error(w, http.StatusNotFound, "not_found", "Usuário não encontrado")
+			return
+		}
+		if errors.Is(err, services.Err2FAAlreadyEnabled) {
+			response.Error(w, http.StatusConflict, "2fa_already_enabled", err.Error())
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "internal_error", "Erro ao iniciar configuração do 2FA")
@@ -194,6 +211,8 @@ func (h *MeHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, services.ErrWrongPassword):
 			response.Error(w, http.StatusUnauthorized, "wrong_password", "Senha atual incorreta")
+		case errors.Is(err, services.ErrAccountLocked):
+			response.Error(w, http.StatusLocked, "account_locked", err.Error())
 		case errors.Is(err, services.ErrUserNotFound):
 			response.Error(w, http.StatusNotFound, "not_found", "Usuário não encontrado")
 		default:
@@ -216,6 +235,8 @@ func (h *MeHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, services.ErrWrongPassword):
 			response.Error(w, http.StatusUnauthorized, "wrong_password", "Senha incorreta")
+		case errors.Is(err, services.ErrAccountLocked):
+			response.Error(w, http.StatusLocked, "account_locked", err.Error())
 		case errors.Is(err, services.ErrOwnedOrgHasMembers):
 			response.Error(w, http.StatusConflict, "owned_org_has_members", err.Error())
 		case errors.Is(err, services.ErrUserNotFound):

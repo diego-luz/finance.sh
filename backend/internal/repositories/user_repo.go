@@ -136,7 +136,37 @@ func (r *UserRepository) FindRefreshToken(hash string) (*entities.RefreshToken, 
 }
 
 func (r *UserRepository) RevokeRefreshToken(id uuid.UUID) error {
-	return r.db.Model(&entities.RefreshToken{}).Where("id = ?", id).Update("revoked", true).Error
+	return r.db.Model(&entities.RefreshToken{}).Where("id = ?", id).
+		Updates(map[string]any{"revoked": true, "revoked_at": time.Now().UTC()}).Error
+}
+
+// FindRefreshTokenAny looks a token up by hash whether revoked or not, so that
+// a rotated token presented again can be told apart from an unknown one.
+func (r *UserRepository) FindRefreshTokenAny(hash string) (*entities.RefreshToken, error) {
+	var t entities.RefreshToken
+	err := r.db.Where("token_hash = ?", hash).First(&t).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, ErrNotFound
+	}
+	return &t, err
+}
+
+// ClaimRefreshToken revokes the token only if it is still active and reports
+// whether this call did it. Of two concurrent refreshes with the same token,
+// exactly one gets true; the plain UPDATE ... WHERE id let both through.
+func (r *UserRepository) ClaimRefreshToken(id uuid.UUID) (bool, error) {
+	res := r.db.Model(&entities.RefreshToken{}).
+		Where("id = ? AND revoked = false", id).
+		Updates(map[string]any{"revoked": true, "revoked_at": time.Now().UTC()})
+	return res.RowsAffected == 1, res.Error
+}
+
+// RevokeRefreshFamily revokes every token of a login session (reuse detected,
+// or the account was disabled).
+func (r *UserRepository) RevokeRefreshFamily(familyID uuid.UUID) error {
+	return r.db.Model(&entities.RefreshToken{}).
+		Where("family_id = ? AND revoked = false", familyID).
+		Updates(map[string]any{"revoked": true, "revoked_at": time.Now().UTC()}).Error
 }
 
 // RevokeAllRefreshTokens revokes every active refresh token of a user (used
@@ -313,8 +343,21 @@ func (r *UserRepository) FindRecoveryCode(userID uuid.UUID, codeHash string) (*e
 	return &rc, err
 }
 
-// UseRecoveryCode marks a recovery code consumed.
-func (r *UserRepository) UseRecoveryCode(id uuid.UUID) error {
-	return r.db.Model(&entities.RecoveryCode{}).
-		Where("id = ?", id).Update("used", true).Error
+// UseRecoveryCode marks a recovery code consumed and reports whether this call
+// did it: with "AND used = false" two parallel uses of the same code can no
+// longer both succeed.
+func (r *UserRepository) UseRecoveryCode(id uuid.UUID) (bool, error) {
+	res := r.db.Model(&entities.RecoveryCode{}).
+		Where("id = ? AND used = false", id).Update("used", true)
+	return res.RowsAffected == 1, res.Error
+}
+
+// ClaimTOTPStep records step as the user's last accepted TOTP step, only if it
+// is newer than the stored one, and reports whether it was. Atomic, so two
+// requests carrying the same code cannot both pass.
+func (r *UserRepository) ClaimTOTPStep(userID uuid.UUID, step int64) (bool, error) {
+	res := r.db.Model(&entities.User{}).
+		Where("id = ? AND totp_last_step < ?", userID, step).
+		Update("totp_last_step", step)
+	return res.RowsAffected == 1, res.Error
 }

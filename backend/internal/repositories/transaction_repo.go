@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/finance-sh/finance-sh/internal/dto"
@@ -223,6 +224,35 @@ func (r *TransactionRepository) ExistsBySignature(orgID, accountID uuid.UUID, da
 			orgID, accountID, amount, description, day, next).
 		Count(&count).Error
 	return count > 0, err
+}
+
+// SignaturesInRange returns the date+amount+description signature of every
+// transaction of the account between from and to (whole days, UTC), as keys of
+// SignatureKey. One query for a whole statement, instead of ExistsBySignature
+// per row.
+func (r *TransactionRepository) SignaturesInRange(orgID, accountID uuid.UUID, from, to time.Time) (map[string]bool, error) {
+	day := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, time.UTC)
+	end := time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1)
+	var rows []struct {
+		Date        time.Time
+		Amount      int64
+		Description string
+	}
+	err := r.db.Model(&entities.Transaction{}).
+		Select("date, amount, description").
+		Where("organization_id = ? AND account_id = ? AND date >= ? AND date < ?", orgID, accountID, day, end).
+		Scan(&rows).Error
+	out := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		out[SignatureKey(row.Date, row.Amount, row.Description)] = true
+	}
+	return out, err
+}
+
+// SignatureKey is the duplicate signature ExistsBySignature compares: same UTC
+// day, amount and description.
+func SignatureKey(date time.Time, amount int64, description string) string {
+	return date.UTC().Format("2006-01-02") + "|" + strconv.FormatInt(amount, 10) + "|" + description
 }
 
 // MostCommonCategoryForToken implements the HISTORY fallback for automatic

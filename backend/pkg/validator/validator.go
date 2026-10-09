@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"reflect"
 	"strings"
@@ -28,10 +29,27 @@ func newValidator() *validator.Validate {
 	return v
 }
 
-// BindJSON decodes the request body into dst and validates it using struct
-// tags. It returns a map of field->message on failure (empty map = ok).
+// MaxJSONBody caps a JSON request body. Without a cap, a single field of a
+// few hundred MB (even on the public /auth/login) was buffered whole in
+// memory, and a handful of parallel requests ran the process out of memory.
+const MaxJSONBody = 1 << 20
+
+// BindJSON decodes the request body (up to MaxJSONBody) into dst and validates
+// it using struct tags. It returns a map of field->message on failure (empty
+// map = ok).
 func BindJSON(r *http.Request, dst interface{}) (map[string]string, error) {
+	return BindJSONLimit(r, dst, MaxJSONBody)
+}
+
+// BindJSONLimit is BindJSON with an explicit size cap, for the few routes that
+// legitimately take more (e.g. committing a large statement import).
+func BindJSONLimit(r *http.Request, dst interface{}, limit int64) (map[string]string, error) {
+	r.Body = http.MaxBytesReader(nil, r.Body, limit)
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
+		var grande *http.MaxBytesError
+		if errors.As(err, &grande) {
+			return map[string]string{"body": "Corpo da requisição muito grande"}, err
+		}
 		return map[string]string{"body": "JSON inválido"}, err
 	}
 	return Validate(dst), nil

@@ -23,14 +23,19 @@ func (r *AccountRepository) Update(a *entities.Account) error {
 }
 
 func (r *AccountRepository) Delete(orgID, id uuid.UUID) error {
-	res := r.db.Where("organization_id = ? AND id = ?", orgID, id).Delete(&entities.Account{})
-	if res.Error != nil {
-		return res.Error
-	}
-	if res.RowsAffected == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("organization_id = ? AND id = ?", orgID, id).Delete(&entities.Account{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrNotFound
+		}
+		// its recurrence rules go too: they kept firing into the deleted
+		// account, and their FK blocked the account's hard purge later
+		return tx.Where("organization_id = ? AND account_id = ?", orgID, id).
+			Delete(&entities.RecurrenceRule{}).Error
+	})
 }
 
 func (r *AccountRepository) FindByID(orgID, id uuid.UUID) (*entities.Account, error) {

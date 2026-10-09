@@ -16,6 +16,8 @@ export interface SetupInitializePayload {
     name: string;
     currency: string;
   };
+  /** Code printed in the server log at boot; proves access to the server. */
+  setup_token: string;
 }
 
 export interface SetupStatus {
