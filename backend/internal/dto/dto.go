@@ -706,12 +706,13 @@ type InvitationRequest struct {
 }
 
 type InvitationDTO struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Role      string    `json:"role"`
-	Accepted  bool      `json:"accepted"`
-	Token     string    `json:"token,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `json:"id"`
+	Email     string     `json:"email"`
+	Role      string     `json:"role"`
+	Accepted  bool       `json:"accepted"`
+	Token     string     `json:"token,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 type AcceptInvitationRequest struct {

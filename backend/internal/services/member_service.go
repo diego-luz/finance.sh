@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/finance-sh/finance-sh/internal/dto"
 	"github.com/finance-sh/finance-sh/internal/entities"
@@ -16,6 +17,9 @@ var (
 	ErrLastOwner       = errors.New("não é possível remover ou rebaixar o último proprietário")
 	ErrAlreadyMember   = errors.New("usuário já é membro da organização")
 	ErrInvitationToken = errors.New("convite inválido ou já utilizado")
+	// ErrInvitationEmail: the link was sent to another address. Anyone holding a
+	// leaked link (chat, log) used to join with the invited role.
+	ErrInvitationEmail = errors.New("este convite foi enviado para outro e-mail; entre com a conta convidada")
 	// ErrOwnerOnly is returned when an admin attempts an action reserved to owners
 	// (granting/altering/removing the owner role). Mapped to HTTP 403.
 	ErrOwnerOnly = errors.New("apenas um proprietário pode conceder ou alterar o papel de proprietário")
@@ -126,11 +130,15 @@ func (s *MemberService) CreateInvitation(orgID uuid.UUID, req dto.InvitationRequ
 	if err != nil {
 		return nil, err
 	}
+	// stored as a hash, like refresh and reset tokens, and with an expiry: a
+	// link copied once used to work forever
+	expira := time.Now().Add(invitationTTL)
 	inv := &entities.Invitation{
 		OrganizationID: orgID,
 		Email:          strings.ToLower(strings.TrimSpace(req.Email)),
 		Role:           entities.Role(req.Role),
-		Token:          token,
+		Token:          hash.SHA256(token),
+		ExpiresAt:      &expira,
 	}
 	if err := s.members.CreateInvitation(inv); err != nil {
 		return nil, err
@@ -139,6 +147,9 @@ func (s *MemberService) CreateInvitation(orgID uuid.UUID, req dto.InvitationRequ
 	return &d, nil
 }
 
+// invitationTTL is how long an invite link stays valid.
+const invitationTTL = 7 * 24 * time.Hour
+
 func (s *MemberService) RevokeInvitation(orgID, id uuid.UUID) error {
 	return s.members.DeleteInvitation(orgID, id)
 }
@@ -146,14 +157,27 @@ func (s *MemberService) RevokeInvitation(orgID, id uuid.UUID) error {
 // AcceptInvitation lets the authenticated user join the inviting org. The org is
 // resolved from the invitation, so the active tenant is irrelevant.
 func (s *MemberService) AcceptInvitation(userID uuid.UUID, token string) (*dto.MemberDTO, error) {
-	inv, err := s.members.FindInvitationByToken(strings.TrimSpace(token))
+	inv, err := s.members.FindInvitationByToken(hash.SHA256(strings.TrimSpace(token)))
 	if err != nil {
 		return nil, ErrInvitationToken
+	}
+	if inv.ExpiresAt != nil && time.Now().After(*inv.ExpiresAt) {
+		return nil, ErrInvitationToken
+	}
+	user, err := s.users.FindByID(userID)
+	if err != nil {
+		return nil, ErrInvitationToken
+	}
+	if !strings.EqualFold(strings.TrimSpace(user.Email), inv.Email) {
+		return nil, ErrInvitationEmail
 	}
 	if existing, err := s.members.MembershipByUserOrg(userID, inv.OrganizationID); err == nil && existing != nil {
 		return nil, ErrAlreadyMember
 	}
 	m, err := s.members.AcceptInvitation(inv, userID)
+	if errors.Is(err, repositories.ErrNotFound) {
+		return nil, ErrInvitationToken // accepted meanwhile by a concurrent call
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -185,5 +209,6 @@ func invitationDTO(i *entities.Invitation, token string) dto.InvitationDTO {
 		Accepted:  i.Accepted,
 		Token:     token,
 		CreatedAt: i.CreatedAt,
+		ExpiresAt: i.ExpiresAt,
 	}
 }

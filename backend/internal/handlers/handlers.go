@@ -71,6 +71,8 @@ func writeServiceError(w http.ResponseWriter, err error) bool {
 		response.Error(w, http.StatusForbidden, "forbidden", err.Error())
 	case errors.Is(err, services.ErrAlreadyMember):
 		response.Error(w, http.StatusConflict, "already_member", err.Error())
+	case errors.Is(err, services.ErrInvitationEmail):
+		response.Error(w, http.StatusForbidden, "invitation_email_mismatch", err.Error())
 	case errors.Is(err, services.ErrInvitationToken):
 		response.Error(w, http.StatusNotFound, "invalid_invitation", err.Error())
 	case errors.Is(err, services.ErrInvalidToken):

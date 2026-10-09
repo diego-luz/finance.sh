@@ -155,9 +155,15 @@ func (r *MembershipRepository) AcceptInvitation(inv *entities.Invitation, userID
 		Role:           inv.Role,
 	}
 	err := r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&entities.Invitation{}).
-			Where("id = ?", inv.ID).Update("accepted", true).Error; err != nil {
-			return err
+		// only the first accept wins: without accepted = false, two users
+		// sending the same token at once both became members
+		res := tx.Model(&entities.Invitation{}).
+			Where("id = ? AND accepted = false", inv.ID).Update("accepted", true)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return ErrNotFound
 		}
 		return tx.Create(membership).Error
 	})
