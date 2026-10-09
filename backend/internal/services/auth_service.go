@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"regexp"
 	"strings"
 	"time"
@@ -197,8 +198,12 @@ func (s *AuthService) sendVerificationEmail(user *entities.User) {
 func (s *AuthService) Login(req dto.LoginRequest, meta AuthMeta) (*dto.LoginResult, error) {
 	ctx := context.Background()
 	email := strings.ToLower(strings.TrimSpace(req.Email))
+	// Counted per e-mail AND IP: keyed by e-mail alone, anyone who knew an
+	// address kept that account locked forever (one try every few minutes)
+	// and, since the same budget guards password changes, blocked those too.
+	key := loginLockKey(email, meta.IP)
 
-	if s.lockout.Locked(ctx, email) {
+	if s.lockout.Locked(ctx, key) {
 		return nil, ErrAccountLocked
 	}
 
@@ -209,7 +214,7 @@ func (s *AuthService) Login(req dto.LoginRequest, meta AuthMeta) (*dto.LoginResu
 		// same lockout answer once the budget is spent (it used to stay 401
 		// while a real account turned 423).
 		hash.Check(dummyPasswordHash, req.Password)
-		locked := s.lockout.RegisterFailure(ctx, email)
+		locked := s.lockout.RegisterFailure(ctx, key)
 		slog.Info("login failed", "email", logger.MaskEmail(email), "reason", "unknown_user")
 		if locked {
 			return nil, ErrAccountLocked
@@ -217,7 +222,7 @@ func (s *AuthService) Login(req dto.LoginRequest, meta AuthMeta) (*dto.LoginResu
 		return nil, ErrInvalidCredentials
 	}
 	if !hash.Check(user.PasswordHash, req.Password) {
-		locked := s.lockout.RegisterFailure(ctx, email)
+		locked := s.lockout.RegisterFailure(ctx, key)
 		slog.Info("login failed", "email", logger.MaskEmail(email), "reason", "bad_password", "locked", locked)
 		if locked {
 			return nil, ErrAccountLocked
@@ -229,7 +234,7 @@ func (s *AuthService) Login(req dto.LoginRequest, meta AuthMeta) (*dto.LoginResu
 	// valid credentials. Reset the failure counter (the password was correct) so
 	// the account is not also lockout-throttled on top of being disabled.
 	if user.Disabled {
-		s.lockout.Reset(ctx, email)
+		s.lockout.Reset(ctx, key)
 		slog.Info("login blocked", "email", logger.MaskEmail(email), "reason", "disabled")
 		return nil, ErrAccountDisabled
 	}
@@ -255,7 +260,7 @@ func (s *AuthService) Login(req dto.LoginRequest, meta AuthMeta) (*dto.LoginResu
 	}
 
 	// Full login succeeded (no 2FA): reset the failure counter.
-	s.lockout.Reset(ctx, email)
+	s.lockout.Reset(ctx, key)
 	return &dto.LoginResult{Auth: auth}, nil
 }
 
@@ -342,13 +347,26 @@ var dummyPasswordHash = func() string {
 	return h
 }()
 
+// loginLockKey is the lockout key of a login attempt: e-mail and client IP.
+func loginLockKey(email, ip string) string {
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		ip = host // an untrusted peer still carries its port
+	}
+	return email + "|" + ip
+}
+
+// accountLockKey is the lockout key for re-checking a logged-in user's password.
+func accountLockKey(id uuid.UUID) string { return "conta:" + id.String() }
+
 // checkPasswordLimited verifies a logged-in user's current password under the
 // same per-account attempt budget as login. Without it, a stolen access token
 // could guess the password through change-password or account deletion with no
 // lockout at all, then change it and revoke the owner's sessions.
 func checkPasswordLimited(lim *lockout.Limiter, user *entities.User, password string) error {
 	ctx := context.Background()
-	key := strings.ToLower(strings.TrimSpace(user.Email))
+	// its own key, apart from login: whoever only knows the e-mail cannot
+	// lock the owner out of changing the password or deleting the account
+	key := accountLockKey(user.ID)
 	if lim != nil && lim.Locked(ctx, key) {
 		return ErrAccountLocked
 	}
@@ -479,6 +497,14 @@ func (s *AuthService) ResetPassword(rawToken, newPassword string) error {
 			return ErrInvalidToken
 		}
 		return err
+	}
+	// a fresh password unlocks the account everywhere
+	if pr, err := s.resets.FindByTokenHash(tokenHash); err == nil {
+		if user, err := s.users.FindByID(pr.UserID); err == nil {
+			ctx := context.Background()
+			s.lockout.ResetPrefix(ctx, strings.ToLower(strings.TrimSpace(user.Email))+"|")
+			s.lockout.Reset(ctx, accountLockKey(user.ID))
+		}
 	}
 	return nil
 }
@@ -695,11 +721,12 @@ func (s *AuthService) VerifyTwoFactorLogin(req dto.TwoFactorVerifyRequest, meta 
 	// Brute-force protection for the second factor: reuse the login lockout keyed
 	// by the user's email so it shares the budget with the password stage.
 	email := strings.ToLower(strings.TrimSpace(user.Email))
-	if s.lockout.Locked(ctx, email) {
+	key := loginLockKey(email, meta.IP)
+	if s.lockout.Locked(ctx, key) {
 		return nil, ErrAccountLocked
 	}
 	if !s.checkSecondFactor(user, strings.TrimSpace(req.Code)) {
-		if locked := s.lockout.RegisterFailure(ctx, email); locked {
+		if locked := s.lockout.RegisterFailure(ctx, key); locked {
 			return nil, ErrAccountLocked
 		}
 		return nil, ErrInvalidCode
@@ -715,7 +742,7 @@ func (s *AuthService) VerifyTwoFactorLogin(req dto.TwoFactorVerifyRequest, meta 
 	}
 
 	// Full login succeeded: reset the failure counter.
-	s.lockout.Reset(ctx, email)
+	s.lockout.Reset(ctx, key)
 	return auth, nil
 }
 

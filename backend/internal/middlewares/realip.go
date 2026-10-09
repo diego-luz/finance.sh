@@ -6,17 +6,19 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+	"sync"
 )
 
 // DefaultTrustedProxies are the peers whose X-Forwarded-For / X-Real-IP is
-// believed when TRUSTED_PROXIES is not set: loopback and the private ranges,
-// where a reverse proxy on the same host or Docker network connects from. A
-// client reaching the app straight from the internet has a public address, so
-// its headers are ignored and its own address is used.
-var DefaultTrustedProxies = []string{
-	"127.0.0.0/8", "::1/128",
-	"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7",
-}
+// believed when TRUSTED_PROXIES is not set: loopback only. Trusting the private
+// ranges by default let any machine on the LAN forge its address, and behind
+// rootless Docker every client arrives from a 172.x gateway. A proxy elsewhere
+// (another container, another host) has to be listed in TRUSTED_PROXIES.
+var DefaultTrustedProxies = []string{"127.0.0.0/8", "::1/128"}
+
+// avisoProxy logs, once, a forwarded header from a private peer that is not
+// trusted: almost always a reverse proxy that still needs TRUSTED_PROXIES.
+var avisoProxy sync.Once
 
 // ParseTrustedProxies turns a list of IPs or CIDRs into prefixes, skipping (and
 // logging) anything it cannot parse.
@@ -75,7 +77,17 @@ func clientIP(r *http.Request, confia func(netip.Addr) bool) (string, bool) {
 		host = r.RemoteAddr
 	}
 	par, err := netip.ParseAddr(host)
-	if err != nil || !confia(par) {
+	if err != nil {
+		return "", false
+	}
+	if !confia(par) {
+		if par.IsPrivate() && (r.Header.Get("X-Forwarded-For") != "" || r.Header.Get("X-Real-IP") != "") {
+			avisoProxy.Do(func() {
+				slog.Warn("X-Forwarded-For ignored from an untrusted private address; if a reverse proxy runs there, "+
+					"add it to TRUSTED_PROXIES (e.g. TRUSTED_PROXIES=172.16.0.0/12 for one on the Docker network), "+
+					"otherwise every client shares the proxy's rate limit", "peer", par.String())
+			})
+		}
 		return "", false
 	}
 	var cadeia []string
