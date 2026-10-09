@@ -52,11 +52,20 @@ export function TwoFactorCard() {
   const [disableOpen, setDisableOpen] = useState(false);
   const [disableCode, setDisableCode] = useState('');
 
+  // Enrollment asks for the password first (the backend requires it).
+  const [activateOpen, setActivateOpen] = useState(false);
+  const [activatePassword, setActivatePassword] = useState('');
+
   const startSetup = () => {
+    if (!activatePassword) return;
     setRecoveryCodes(null);
     setEnableCode('');
-    setup.mutate(undefined, {
-      onSuccess: (data) => setSetupData(data),
+    setup.mutate(activatePassword, {
+      onSuccess: (data) => {
+        setSetupData(data);
+        setActivateOpen(false);
+        setActivatePassword('');
+      },
     });
   };
 
@@ -203,7 +212,7 @@ export function TwoFactorCard() {
                   Desativar
                 </Button>
               ) : (
-                <Button size="sm" loading={setup.isPending} onClick={startSetup}>
+                <Button size="sm" onClick={() => setActivateOpen(true)}>
                   Ativar
                 </Button>
               )}
@@ -211,6 +220,41 @@ export function TwoFactorCard() {
           )
         )}
       </Card>
+
+      {/* Password before enrollment */}
+      <Modal
+        open={activateOpen}
+        onClose={() => setActivateOpen(false)}
+        title="Ativar autenticação em dois fatores"
+        description="Confirme sua senha para continuar."
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setActivateOpen(false)} disabled={setup.isPending}>
+              Cancelar
+            </Button>
+            <Button onClick={startSetup} loading={setup.isPending} disabled={!activatePassword}>
+              Continuar
+            </Button>
+          </>
+        }
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            startSetup();
+          }}
+        >
+          <Input
+            label="Senha atual"
+            type="password"
+            autoComplete="current-password"
+            autoFocus
+            value={activatePassword}
+            onChange={(e) => setActivatePassword(e.target.value)}
+          />
+        </form>
+      </Modal>
 
       {/* Disable confirmation */}
       <Modal

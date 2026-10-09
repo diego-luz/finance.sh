@@ -27,9 +27,22 @@ func NewMeHandler(auth *services.AuthService, lgpd *services.LGPDService) *MeHan
 
 // SetupTwoFactor POST /me/2fa/setup
 func (h *MeHandler) SetupTwoFactor(w http.ResponseWriter, r *http.Request) {
+	var req dto.TwoFactorSetupRequest
+	if fields, err := validator.BindJSON(r, &req); err != nil || len(fields) > 0 {
+		response.ValidationError(w, fields)
+		return
+	}
 	userID := middlewares.UserID(r.Context())
-	res, err := h.auth.SetupTwoFactor(userID)
+	res, err := h.auth.SetupTwoFactor(userID, req.Password)
 	if err != nil {
+		if errors.Is(err, services.ErrWrongPassword) {
+			response.Error(w, http.StatusUnauthorized, "wrong_password", "Senha incorreta")
+			return
+		}
+		if errors.Is(err, services.ErrAccountLocked) {
+			response.Error(w, http.StatusLocked, "account_locked", err.Error())
+			return
+		}
 		if errors.Is(err, services.ErrUserNotFound) {
 			response.Error(w, http.StatusNotFound, "not_found", "Usuário não encontrado")
 			return

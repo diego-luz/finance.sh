@@ -620,7 +620,7 @@ func (s *AuthService) ResendVerification(email string) {
 
 // SetupTwoFactor generates a fresh TOTP secret (issuer "finance.sh", account=email),
 // stores it as pending (2FA not yet enabled) and returns the secret + otpauth URL.
-func (s *AuthService) SetupTwoFactor(userID uuid.UUID) (*dto.TwoFactorSetupResponse, error) {
+func (s *AuthService) SetupTwoFactor(userID uuid.UUID, password string) (*dto.TwoFactorSetupResponse, error) {
 	user, err := s.users.FindByID(userID)
 	if err != nil {
 		return nil, ErrUserNotFound
@@ -630,6 +630,12 @@ func (s *AuthService) SetupTwoFactor(userID uuid.UUID) (*dto.TwoFactorSetupRespo
 	// off goes through DisableTwoFactor, which asks for a valid code.
 	if user.TwoFactorEnabled {
 		return nil, Err2FAAlreadyEnabled
+	}
+	// The password, not just a session: with only a stolen access token an
+	// attacker could enroll their own authenticator and lock the owner out at
+	// the next login.
+	if err := checkPasswordLimited(s.lockout, user, password); err != nil {
+		return nil, err
 	}
 	secret, url, err := totp.Generate("finance.sh", user.Email)
 	if err != nil {
@@ -656,8 +662,13 @@ func (s *AuthService) EnableTwoFactor(userID uuid.UUID, code string) (*dto.TwoFa
 	if secret == "" {
 		return nil, Err2FANotPending
 	}
-	if !totp.Validate(strings.TrimSpace(code), secret) {
+	passo, ok := totp.ValidateStep(code, secret, time.Now())
+	if !ok {
 		return nil, ErrInvalidCode
+	}
+	// the code that turned 2FA on cannot also open the next login
+	if _, err := s.users.ClaimTOTPStep(userID, passo); err != nil {
+		return nil, err
 	}
 
 	codes, err := totp.RecoveryCodes(recoveryCodeCount)

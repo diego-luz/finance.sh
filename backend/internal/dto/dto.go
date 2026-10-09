@@ -771,6 +771,12 @@ type TwoFactorSetupResponse struct {
 }
 
 // TwoFactorCodeRequest carries a 6-digit TOTP (used for enable/disable).
+// TwoFactorSetupRequest starts 2FA enrollment; the current password is
+// required so a stolen session alone cannot enroll the attacker's device.
+type TwoFactorSetupRequest struct {
+	Password string `json:"password" validate:"required,max=72"`
+}
+
 type TwoFactorCodeRequest struct {
 	Code string `json:"code" validate:"required"`
 }
