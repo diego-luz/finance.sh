@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/finance-sh/finance-sh/internal/middlewares"
 	"github.com/finance-sh/finance-sh/internal/services"
@@ -53,10 +54,10 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	contentType := header.Header.Get("Content-Type")
-	if contentType == "" {
-		contentType = sniffContentType(file)
-	}
+	// The type comes from the bytes, never from the client: an HTML page
+	// declared as image/png used to be stored (and listed) as an image. Only
+	// what the content really is goes through the service's allow-list.
+	contentType := sniffContentType(file)
 
 	item, err := h.attachments.Upload(orgID, userID, txID, header.Filename, contentType, header.Size, file)
 	if writeServiceError(w, err) {
@@ -123,6 +124,10 @@ func sniffContentType(file io.ReadSeeker) string {
 	n, _ := file.Read(buf)
 	ct := http.DetectContentType(buf[:n])
 	_, _ = file.Seek(0, io.SeekStart)
+	// "text/html; charset=utf-8" -> "text/html"
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		ct = strings.TrimSpace(ct[:i])
+	}
 	return ct
 }
 
