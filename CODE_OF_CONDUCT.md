@@ -38,7 +38,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at **conduct@finance.sh**. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement by contacting the maintainer, [@diego-luz](https://github.com/diego-luz), through GitHub. Abuse that breaks GitHub's rules can also be [reported to GitHub](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam). All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 
@@ -126,7 +126,7 @@ Este Código de Conduta aplica-se a todos os espaços da comunidade e também qu
 
 ## Aplicação
 
-Casos de comportamento abusivo, de assédio ou inaceitável podem ser reportados aos líderes da comunidade responsáveis pela aplicação em **conduct@finance.sh**. Todas as reclamações serão revisadas e investigadas de forma rápida e justa.
+Casos de comportamento abusivo, de assédio ou inaceitável podem ser reportados aos líderes da comunidade responsáveis pela aplicação contatando o mantenedor, [@diego-luz](https://github.com/diego-luz), pelo GitHub. Abusos que violem as regras do GitHub também podem ser [denunciados ao GitHub](https://docs.github.com/pt/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam). Todas as reclamações serão revisadas e investigadas de forma rápida e justa.
 
 Todos os líderes da comunidade são obrigados a respeitar a privacidade e segurança do denunciante de qualquer incidente.
 
