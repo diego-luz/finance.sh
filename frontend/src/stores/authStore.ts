@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthResponse, Organization, User } from '@/types';
 
+const STORAGE_KEY = 'finance-sh-auth';
+
 interface AuthState {
   user: User | null;
   organizations: Organization[];
@@ -85,7 +87,7 @@ export const useAuthStore = create<AuthState>()(
         }),
     }),
     {
-      name: 'finance-sh-auth',
+      name: STORAGE_KEY,
       partialize: (s) => ({
         user: s.user,
         organizations: s.organizations,
@@ -105,8 +107,41 @@ function mergeOrg(orgs: Organization[], org: Organization): Organization[] {
   return next;
 }
 
+
+/**
+ * Tokens as last written to localStorage by ANY tab. The in-memory store is
+ * only read from storage on page load, so a tab that slept while another one
+ * rotated the refresh token would otherwise present the rotated one again —
+ * which the backend treats as a stolen token and revokes the whole session.
+ */
+function readPersistedTokens(): { accessToken: string | null; refreshToken: string | null } | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const state = JSON.parse(raw)?.state;
+    return { accessToken: state?.accessToken ?? null, refreshToken: state?.refreshToken ?? null };
+  } catch {
+    return null;
+  }
+}
+
+// Another tab logged in, refreshed or logged out: follow it.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY) void useAuthStore.persist.rehydrate();
+  });
+}
+
 /** Non-hook accessors for use outside React (e.g. axios interceptors). */
 export const authStore = {
+  readPersistedTokens,
+  /** Flag the session as needing a password change (server said so). */
+  requirePasswordChange: () => {
+    const user = useAuthStore.getState().user;
+    if (user && !user.must_change_password) {
+      useAuthStore.getState().setUser({ ...user, must_change_password: true });
+    }
+  },
   getAccessToken: () => useAuthStore.getState().accessToken,
   getRefreshToken: () => useAuthStore.getState().refreshToken,
   getCurrentOrgId: () => useAuthStore.getState().currentOrgId,

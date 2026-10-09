@@ -15,6 +15,10 @@ import { Logo } from '@/components/Logo';
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const accessToken = useAuthStore((s) => s.accessToken);
+  // Hydrate on login/logout only. Keyed on the token itself, every refresh
+  // (each ~15 min) showed the splash, unmounted the whole app (open forms and
+  // modals were lost) and fetched /me again.
+  const loggedIn = Boolean(accessToken);
   const setUser = useAuthStore((s) => s.setUser);
   const setOrganizations = useAuthStore((s) => s.setOrganizations);
   const queryClient = useQueryClient();
@@ -26,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    if (!accessToken) {
+    if (!loggedIn) {
       setHydrating(false);
       return;
     }
@@ -55,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     // Only run on token changes (login/logout), not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+  }, [loggedIn]);
 
   if (hydrating) {
     return (
