@@ -54,6 +54,7 @@ func ParseCSV(r io.Reader, opts CSVOptions) ([]ParsedRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	data = ToUTF8(data)
 	text := stripBOM(string(data))
 	if strings.TrimSpace(text) == "" {
 		return nil, fmt.Errorf("arquivo CSV vazio")

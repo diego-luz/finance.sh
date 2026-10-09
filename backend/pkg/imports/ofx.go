@@ -19,12 +19,12 @@ func ParseOFX(r io.Reader) ([]ParsedRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	content := string(data)
+	content := string(ToUTF8(data))
 
 	rows := make([]ParsedRow, 0, 16)
 	// Iterate over every STMTTRN block. Matching is case-insensitive because some
 	// generators emit lowercase tags.
-	lower := strings.ToLower(content)
+	lower := asciiLower(content)
 	const openTag = "<stmttrn>"
 	const closeTag = "</stmttrn>"
 
@@ -97,8 +97,8 @@ func parseSTMTTRN(block string) (ParsedRow, bool) {
 // `<` or the end of the line, whichever comes first. Matching is
 // case-insensitive. Returns "" when the tag is absent.
 func ofxTag(block, tag string) string {
-	lower := strings.ToLower(block)
-	open := "<" + strings.ToLower(tag) + ">"
+	lower := asciiLower(block)
+	open := "<" + asciiLower(tag) + ">"
 	idx := strings.Index(lower, open)
 	if idx < 0 {
 		return ""
