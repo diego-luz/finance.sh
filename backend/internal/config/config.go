@@ -128,7 +128,8 @@ func Load() *Config {
 			AccessTTL:     time.Duration(getenvInt("JWT_ACCESS_TTL_MIN", 15)) * time.Minute,
 			RefreshTTL:    time.Duration(getenvInt("JWT_REFRESH_TTL_DAYS", 7)) * 24 * time.Hour,
 		},
-		CORSOrigins:      []string{getenv("CORS_ORIGINS", "http://localhost:5173")},
+		// a comma-separated list; taken whole it became one invalid origin
+		CORSOrigins:      splitList(getenv("CORS_ORIGINS", "http://localhost:5173")),
 		RateLimitRPM:     getenvInt("RATE_LIMIT_RPM", 120),
 		AuthRateLimitRPM: getenvInt("AUTH_RATE_LIMIT_RPM", 30),
 		TrustedProxies:   splitList(getenv("TRUSTED_PROXIES", "")),

@@ -105,6 +105,10 @@ services:
       BOOTSTRAP_ADMIN: ${BOOTSTRAP_ADMIN:-false}
       # código que o wizard pede; vazio = um novo por boot, impresso no log
       SETUP_TOKEN: ${SETUP_TOKEN:-}
+      # true = qualquer um cria conta (e uma organização própria) pela tela de
+      # cadastro. false = só convites e contas criadas pelo super-admin; um
+      # convidado sem conta precisa que o super-admin a crie.
+      REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@finance.sh}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_ORG_NAME: ${ADMIN_ORG_NAME:-Minha Organização}
