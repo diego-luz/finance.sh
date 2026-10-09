@@ -1,0 +1,36 @@
+# Avisos do Trivy aceitos conscientemente. Cada um tem data de validade
+# (exp:): passada a data, o Trivy volta a reportá-lo, e quem estiver mantendo
+# o projeto reavalia. Sem isto, dispensar o alerta no GitHub não basta: ele
+# volta como alerta novo sempre que o go.mod ou o package-lock.json mudam.
+
+# --- github.com/xuri/excelize/v2 2.11.0 --------------------------------------
+# Corrigidos só em commits sem release (2.11.1-0.2026...). O finance.sh só CRIA
+# planilhas na exportação (excelize.NewFile); nunca abre um XLSX vindo de fora,
+# que é onde essas falhas de leitura estão. Atualizar quando sair a 2.11.1.
+CVE-2026-107211 exp:2026-12-31
+CVE-2026-107212 exp:2026-12-31
+CVE-2026-107213 exp:2026-12-31
+CVE-2026-107214 exp:2026-12-31
+CVE-2026-107215 exp:2026-12-31
+CVE-2026-107216 exp:2026-12-31
+CVE-2026-107217 exp:2026-12-31
+CVE-2026-107218 exp:2026-12-31
+CVE-2026-107219 exp:2026-12-31
+CVE-2026-107220 exp:2026-12-31
+CVE-2026-107221 exp:2026-12-31
+CVE-2026-107222 exp:2026-12-31
+CVE-2026-107223 exp:2026-12-31
+CVE-2026-107224 exp:2026-12-31
+CVE-2026-107225 exp:2026-12-31
+
+# --- golang.org/x/crypto -----------------------------------------------------
+# Sem versão corrigida publicada; o govulncheck mostra que o código não chama
+# a função afetada.
+GO-2026-5932 exp:2026-12-31
+
+# --- react-router 6 (frontend) -----------------------------------------------
+# Redirecionamento por barra invertida em <Link>/useNavigate e hidratação SSR:
+# o app não navega para URL vinda do usuário nem usa SSR. Saem com a migração
+# para o React Router 7.
+CVE-2026-53666 exp:2026-12-31
+CVE-2026-53669 exp:2026-12-31
