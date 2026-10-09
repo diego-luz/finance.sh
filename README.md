@@ -445,6 +445,7 @@ Todas em [`.env.example`](.env.example). Resumo:
 | `DB_SSLMODE` | `prefer` | Dev: `prefer`. Prod: `require`/`verify-full`. |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | `dev-...` | **Trocar em produção.** |
 | `JWT_ACCESS_TTL_MIN` / `JWT_REFRESH_TTL_DAYS` | `15` / `7` | TTLs dos tokens. |
+| `JWT_SESSION_MAX_DAYS` | `30` | Prazo máximo de uma sessão: renovar o refresh token não a estende além disso. Reapresentar um refresh token já trocado derruba a sessão inteira (sinal de token roubado). |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MIN` | `5` / `15` | Brute-force lockout. |
 | `SMTP_*` | _(vazio)_ | Sem SMTP → backend loga e-mails no stdout. |
 | `CORS_ORIGINS` | `http://localhost:8090,http://localhost:5173` | Origens permitidas (CSV). Same-origin em prod; relevante só pro Vite dev. |
