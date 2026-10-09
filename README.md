@@ -416,6 +416,8 @@ Self-hosted normalmente roda **sem SMTP** configurado. Há 3 caminhos pra recupe
 
 2. **Link no log.** O fluxo `/forgot-password` da UI gera um token; **sem SMTP, o link `…/reset-password?token=…` é escrito no log**. Pegue em `docker compose logs app` e abra no navegador.
 
+   > **Atenção:** sem SMTP, quem lê o log da app consegue redefinir a senha de **qualquer** conta (inclusive a do super-admin) pedindo um "esqueci a senha" para ela. Restrinja o acesso aos logs (e a quem os coleta) como restringe o acesso ao servidor, ou configure o SMTP.
+
 3. **Super-admin.** No back-office `/admin` → Usuários → resetar a senha de outro usuário (força troca no próximo login).
 
 > Com SMTP configurado (`SMTP_*`), o `/forgot-password` envia o link por e-mail normalmente.
@@ -438,7 +440,7 @@ Todas em [`.env.example`](.env.example). Resumo:
 | `ADMIN_EMAIL` | `admin@finance.sh` | E-mail do admin criado no 1º boot. |
 | `ADMIN_PASSWORD` | _(vazio)_ | Senha do admin. Vazio = gera aleatória e loga no boot. Sempre forçada a trocar no 1º login. |
 | `ADMIN_ORG_NAME` | `Minha Organização` | Nome da organização criada com o admin. |
-| `ENCRYPTION_KEY` | _(base64 32B)_ | Chave AES-256 pra cifrar PII/2FA. **Trocar em produção:** `openssl rand -base64 32`. |
+| `ENCRYPTION_KEY` | _(base64 32B)_ | Chave AES-256 que cifra as notas dos lançamentos e o segredo do 2FA. **Trocar em produção:** `openssl rand -base64 32`. |
 | `DB_HOST` | `postgres` (compose) | Host do PostgreSQL. |
 | `DB_PORT` | `5433` | Porta no host. Interno: `5432`. |
 | `DB_USER` / `DB_PASSWORD` / `DB_NAME` | `finance_sh` | Credenciais/banco. **Trocar em produção.** |
@@ -545,7 +547,7 @@ Controles já implementados:
 - Senhas com **bcrypt**; **lockout** de brute-force.
 - **RBAC** + **isolamento por organization_id**.
 - **Rate limiting** e **CORS** restrito.
-- **Criptografia de campo** AES-256-GCM via `ENCRYPTION_KEY` para PII/segredo 2FA.
+- **Criptografia de campo** AES-256-GCM via `ENCRYPTION_KEY` para as **notas dos lançamentos** e o **segredo do 2FA**. Os demais dados (inclusive CPF/CNPJ, e-mail e telefone dos contatos) ficam em texto no banco: proteja o volume do Postgres com disco criptografado (veja *Backups criptografados*).
 - **Log de auditoria**, **soft delete** e **purga por retenção** (`RETENTION_DAYS`).
 - **Isolamento de rede**: rede de dados `internal` (postgres sem rota externa); porta do Postgres em `127.0.0.1`; app atrás do seu proxy (fixe em loopback se o proxy é local).
 - **Endurecimento de container**: non-root, `no-new-privileges`, `cap_drop: ALL`, rootfs `read_only` + `tmpfs`, limites de memória/PIDs e rotação de logs.
