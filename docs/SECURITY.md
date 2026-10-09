@@ -3,8 +3,10 @@
 Este documento descreve o modelo de ameaças, os controles implementados, a gestão
 de segredos e os itens ainda pendentes (deferred). Linguagem: pt-BR.
 
-> Reporte vulnerabilidades para **security@finance.sh** (placeholder). Não abra
-> issues públicas para falhas de segurança.
+> **Reporte vulnerabilidades em particular**, pelo
+> [reporte privado do GitHub](https://github.com/diego-luz/finance.sh/security/advisories/new)
+> (aba *Security → Report a vulnerability*). Só você e os mantenedores veem o
+> relato até a correção. **Não abra issues públicas** para falhas de segurança.
 
 ---
 

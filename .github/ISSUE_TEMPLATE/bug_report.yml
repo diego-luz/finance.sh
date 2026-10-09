@@ -7,8 +7,8 @@ body:
     attributes:
       value: |
         Obrigado por reportar! Antes de prosseguir:
-        - Pesquise em [issues existentes](https://github.com/finance-sh/finance-sh/issues?q=is%3Aissue) se já não foi reportado.
-        - Veja a [documentação](https://github.com/finance-sh/finance-sh/tree/main/docs) e o [README](https://github.com/finance-sh/finance-sh/blob/main/README.md).
+        - Pesquise em [issues existentes](https://github.com/diego-luz/finance.sh/issues?q=is%3Aissue) se já não foi reportado.
+        - Veja a [documentação](https://github.com/diego-luz/finance.sh/tree/main/docs) e o [README](https://github.com/diego-luz/finance.sh/blob/main/README.md).
         - **Nunca cole secrets, tokens, JWT ou dados pessoais reais.** Sanitize antes de submeter.
 
   - type: textarea

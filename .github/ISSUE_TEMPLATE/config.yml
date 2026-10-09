@@ -1,14 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 Pergunta ou dúvida
-    url: https://github.com/finance-sh/finance-sh/discussions
-    about: Use Discussions para perguntas, dúvidas de configuração e troca de ideias.
   - name: 🔒 Vulnerabilidade de segurança
-    url: https://github.com/finance-sh/finance-sh/security/advisories/new
-    about: Reporte vulnerabilidades de forma privada via GitHub Security Advisories. Não abra issue pública.
+    url: https://github.com/diego-luz/finance.sh/security/advisories/new
+    about: Reporte vulnerabilidades de forma privada pelo GitHub. Não abra issue pública.
   - name: 📖 Documentação
-    url: https://github.com/finance-sh/finance-sh/tree/main/docs
-    about: Arquitetura, LGPD, segurança, deploy. Leia antes de abrir issue de "como fazer X".
-  - name: 🛒 Suporte pago / Cloud waitlist
-    url: https://github.com/finance-sh/finance-sh#suporte-comercial
-    about: Consultoria de deploy, migração, hospedagem gerenciada e waitlist do Cloud.
+    url: https://github.com/diego-luz/finance.sh/tree/main/docs
+    about: Instalação, configuração, arquitetura, segurança e LGPD. Leia antes de abrir issue de "como fazer X".

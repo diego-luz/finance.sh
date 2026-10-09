@@ -7,8 +7,8 @@ body:
     attributes:
       value: |
         Obrigado pela ideia! Para acelerar a discussão:
-        - Verifique se já existe issue/discussão sobre o assunto.
-        - Mudanças grandes (refactor, nova área do produto, mudança de stack) devem começar como [Discussion](https://github.com/finance-sh/finance-sh/discussions) antes de virar issue.
+        - Verifique se já existe issue sobre o assunto.
+        - Mudanças grandes (refactor, nova área do produto, mudança de stack) devem começar como uma issue de proposta, discutida antes de virar código.
         - Features claramente comerciais (OCR, IA, Open Banking BR, multi-tenant gerenciado) podem ser direcionadas pro roadmap **PRO/Cloud** em vez de Community.
 
   - type: textarea
