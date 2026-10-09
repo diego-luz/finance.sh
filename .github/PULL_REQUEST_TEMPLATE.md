@@ -31,8 +31,8 @@ Closes #
 
 <!-- Descreva os passos manuais e/ou automatizados que validaram a mudança. -->
 
-- [ ] `go test ./... -race -count=1` passa (backend)
-- [ ] `npm run test` passa (frontend / landing)
+- [ ] `go test ./... -race -count=1 -short` passa (backend)
+- [ ] `npm test` passa (frontend)
 - [ ] `npm run build` passa sem erro de TS
 - [ ] Testei manualmente o fluxo afetado
 - [ ] Adicionei/atualizei testes cobrindo a mudança
@@ -45,8 +45,8 @@ Closes #
 ## Checklist do contribuidor
 
 - [ ] Commits seguem [Conventional Commits](https://www.conventionalcommits.org/) e estão `Signed-off-by:` (`git commit -s`)
-- [ ] Código formatado: `gofmt -s` (backend) + Prettier (frontend/landing)
-- [ ] Lint passa: `golangci-lint run ./...` (backend) + `npm run lint` (frontend/landing)
+- [ ] Código formatado: `gofmt -s` (backend)
+- [ ] Lint passa: `go vet ./...` (backend) + `npm run lint` (frontend)
 - [ ] Sem `// nolint` ou `// @ts-ignore` sem justificativa em comentário
 - [ ] Strings visíveis ao usuário estão em `frontend/src/i18n/locales/{pt-BR,en,es}/translation.json`
 - [ ] Money manipulado como `int64` em centavos (nunca `float64`)
@@ -72,6 +72,6 @@ Marque com x se aplicável e descreva.
 
 <!-- Não preencher. Espaço pra revisor anotar. -->
 
-- [ ] Squash & merge
+- [ ] Escolher o tipo de merge
 - [ ] Atualizar CHANGELOG
 - [ ] Rotular release (`semver:patch`/`minor`/`major`)
