@@ -79,6 +79,13 @@ type RefreshToken struct {
 	Revoked   bool      `gorm:"default:false" json:"revoked"`
 	UserAgent string    `json:"user_agent,omitempty"`
 	IP        string    `json:"ip,omitempty"`
+	// FamilyID is shared by every token rotated from the same login; a token
+	// presented again after being rotated revokes the whole family.
+	FamilyID uuid.UUID `gorm:"type:uuid;index" json:"-"`
+	// SessionExpiresAt is the family's absolute deadline: rotating no longer
+	// stretches a session forever.
+	SessionExpiresAt *time.Time `json:"-"`
+	RevokedAt        *time.Time `json:"-"`
 }
 
 func (RefreshToken) TableName() string { return "refresh_tokens" }

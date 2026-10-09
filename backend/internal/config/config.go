@@ -101,6 +101,8 @@ type JWTConfig struct {
 	RefreshSecret string
 	AccessTTL     time.Duration
 	RefreshTTL    time.Duration
+	// SessionMaxAge caps a login session however often it is refreshed.
+	SessionMaxAge time.Duration
 }
 
 // Load reads configuration from the environment. A .env file is loaded when
@@ -127,6 +129,7 @@ func Load() *Config {
 			RefreshSecret: getenv("JWT_REFRESH_SECRET", ""),
 			AccessTTL:     time.Duration(getenvInt("JWT_ACCESS_TTL_MIN", 15)) * time.Minute,
 			RefreshTTL:    time.Duration(getenvInt("JWT_REFRESH_TTL_DAYS", 7)) * 24 * time.Hour,
+			SessionMaxAge: time.Duration(getenvInt("JWT_SESSION_MAX_DAYS", 30)) * 24 * time.Hour,
 		},
 		// a comma-separated list; taken whole it became one invalid origin
 		CORSOrigins:      splitList(getenv("CORS_ORIGINS", "http://localhost:5173")),

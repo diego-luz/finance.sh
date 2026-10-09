@@ -272,11 +272,26 @@ func (s *AuthService) LockoutMinutes() int {
 // returns a fresh pair of tokens.
 func (s *AuthService) Refresh(rawToken string, meta AuthMeta) (*dto.AuthResponse, error) {
 	tokenHash := hash.SHA256(rawToken)
-	stored, err := s.users.FindRefreshToken(tokenHash)
+	stored, err := s.users.FindRefreshTokenAny(tokenHash)
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
-	if stored.Revoked || time.Now().After(stored.ExpiresAt) {
+	familia := stored.FamilyID
+	if familia == uuid.Nil {
+		familia = stored.ID
+	}
+	if stored.Revoked {
+		// A rotated token showing up again means two parties hold it: the
+		// owner and whoever copied it. Revoke the whole session so the copy
+		// dies too. A short grace covers two tabs refreshing at the same time.
+		if stored.RevokedAt == nil || time.Since(*stored.RevokedAt) > refreshReuseGrace {
+			_ = s.users.RevokeRefreshFamily(familia)
+			slog.Warn("refresh token reuse: session revoked", "user_id", stored.UserID, "ip", meta.IP)
+		}
+		return nil, ErrInvalidToken
+	}
+	now := time.Now()
+	if now.After(stored.ExpiresAt) || (stored.SessionExpiresAt != nil && now.After(*stored.SessionExpiresAt)) {
 		return nil, ErrInvalidToken
 	}
 
@@ -284,18 +299,35 @@ func (s *AuthService) Refresh(rawToken string, meta AuthMeta) (*dto.AuthResponse
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
+	if user.Disabled {
+		_ = s.users.RevokeRefreshFamily(familia)
+		return nil, ErrInvalidToken
+	}
 
-	// Rotate: invalidate the presented token before issuing a new one.
-	if err := s.users.RevokeRefreshToken(stored.ID); err != nil {
+	// Rotate: claim the presented token before issuing a new one; a concurrent
+	// refresh that lost the claim gets nothing.
+	ok, err := s.users.ClaimRefreshToken(stored.ID)
+	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return nil, ErrInvalidToken
 	}
 
 	org, role, err := s.primaryOrg(user.ID)
 	if err != nil {
 		return nil, err
 	}
-	return s.issueTokens(user, org, role, meta)
+	fim := now.Add(s.cfg.JWT.SessionMaxAge)
+	if stored.SessionExpiresAt != nil {
+		fim = *stored.SessionExpiresAt
+	}
+	return s.issueTokensIn(user, org, role, meta, familia, fim)
 }
+
+// refreshReuseGrace is how recently a token may have been rotated and still be
+// presented again without being taken as theft (two tabs refreshing at once).
+const refreshReuseGrace = 30 * time.Second
 
 // MailEnabled reports whether SMTP is configured (real e-mail delivery). When
 // false, password-reset links are written to the server log instead. Used by the
@@ -682,6 +714,14 @@ func (s *AuthService) primaryOrg(userID uuid.UUID) (*entities.Organization, enti
 }
 
 func (s *AuthService) issueTokens(user *entities.User, org *entities.Organization, role entities.Role, meta AuthMeta) (*dto.AuthResponse, error) {
+	// a fresh login opens a new session family with its own absolute deadline
+	return s.issueTokensIn(user, org, role, meta, uuid.New(), time.Now().Add(s.cfg.JWT.SessionMaxAge))
+}
+
+// issueTokensIn issues an access token and a refresh token belonging to the
+// given session family; the refresh token never outlives the session.
+func (s *AuthService) issueTokensIn(user *entities.User, org *entities.Organization, role entities.Role, meta AuthMeta,
+	familia uuid.UUID, fimSessao time.Time) (*dto.AuthResponse, error) {
 	access, err := jwt.Generate(user.ID.String(), user.Email, s.cfg.JWT.AccessSecret, s.cfg.JWT.AccessTTL)
 	if err != nil {
 		return nil, err
@@ -691,12 +731,18 @@ func (s *AuthService) issueTokens(user *entities.User, org *entities.Organizatio
 	if err != nil {
 		return nil, err
 	}
+	expira := time.Now().Add(s.cfg.JWT.RefreshTTL)
+	if expira.After(fimSessao) {
+		expira = fimSessao
+	}
 	rt := &entities.RefreshToken{
-		UserID:    user.ID,
-		TokenHash: hash.SHA256(raw),
-		ExpiresAt: time.Now().Add(s.cfg.JWT.RefreshTTL),
-		UserAgent: meta.UserAgent,
-		IP:        meta.IP,
+		UserID:           user.ID,
+		TokenHash:        hash.SHA256(raw),
+		ExpiresAt:        expira,
+		UserAgent:        meta.UserAgent,
+		IP:               meta.IP,
+		FamilyID:         familia,
+		SessionExpiresAt: &fimSessao,
 	}
 	if err := s.users.SaveRefreshToken(rt); err != nil {
 		return nil, err
