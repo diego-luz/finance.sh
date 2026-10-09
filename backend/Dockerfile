@@ -32,7 +32,7 @@ ENV VITE_LANDING_URL=${VITE_LANDING_URL}
 RUN npm run build
 
 # ---- stage 2: build the Go binary (with the SPA embedded) ------------------
-FROM golang:1.22-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 
 # Cache module downloads separately from the source tree.
@@ -50,8 +50,8 @@ COPY --from=spa /spa/dist ./internal/web/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 
 # ---- stage 3: runtime ------------------------------------------------------
-# PROD: pin by digest, e.g. FROM alpine:3.20@sha256:...
-FROM alpine:3.20
+# PROD: pin by digest, e.g. FROM alpine:3.24@sha256:...
+FROM alpine:3.24
 # wget (busybox) is used by the compose healthcheck; ca-certs/tzdata for TLS+time.
 RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 finance_sh
 WORKDIR /app

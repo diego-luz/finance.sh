@@ -4,7 +4,7 @@
 
 **Controle financeiro open-source, self-hosted, em pt-BR.**
 
-[![Go](https://img.shields.io/badge/Go-1.22-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://www.docker.com)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
@@ -240,7 +240,7 @@ Detalhes: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 | Camada | Tecnologias |
 |---|---|
-| **Backend** | Go 1.22 · [chi](https://github.com/go-chi/chi) · [GORM](https://gorm.io) · PostgreSQL 16 · JWT (golang-jwt) · bcrypt · golang-migrate · pquerna/otp (2FA) · excelize + go-pdf/fpdf (export) · `golang.org/x/time/rate` (rate limit in-memory) · scheduler goroutine in-process |
+| **Backend** | Go 1.25+ · [chi](https://github.com/go-chi/chi) · [GORM](https://gorm.io) · PostgreSQL 16 · JWT (golang-jwt) · bcrypt · golang-migrate · pquerna/otp (2FA) · excelize + go-pdf/fpdf (export) · httprate (rate limit in-memory) · scheduler goroutine in-process |
 | **Frontend** | React 18 · TypeScript · Vite 6 · Tailwind CSS · React Query (TanStack) · Zustand · Axios · Recharts · React Router · React Hook Form + Zod · react-i18next · vite-plugin-pwa |
 | **Infra** | Docker · Docker Compose · SPA embutida no binário Go (`go:embed`, multi-stage build) · traga seu reverse proxy p/ TLS · GitHub Actions (CI + scans Trivy/gosec/govulncheck/gitleaks) |
 
