@@ -26,6 +26,8 @@ type Config struct {
 	// TrustedProxies are the peers (IPs or CIDRs) whose X-Forwarded-For and
 	// X-Real-IP are believed; empty means middlewares.DefaultTrustedProxies.
 	TrustedProxies []string
+	// SetupToken fixes the first-run setup code; empty = random per boot.
+	SetupToken string
 
 	SwaggerEnabled bool
 	EncryptionKey  string // base64-encoded 32 bytes for AES-256-GCM
@@ -130,6 +132,7 @@ func Load() *Config {
 		RateLimitRPM:     getenvInt("RATE_LIMIT_RPM", 120),
 		AuthRateLimitRPM: getenvInt("AUTH_RATE_LIMIT_RPM", 30),
 		TrustedProxies:   splitList(getenv("TRUSTED_PROXIES", "")),
+		SetupToken:       getenv("SETUP_TOKEN", ""),
 
 		// Off by default: the spec and UI describe every endpoint of the instance,
 		// so exposing them is an opt-in, not something a fresh deploy inherits.

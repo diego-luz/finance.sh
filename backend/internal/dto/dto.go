@@ -914,6 +914,8 @@ type SetupOrganization struct {
 type SetupInitializeRequest struct {
 	User         SetupUser         `json:"user" validate:"required"`
 	Organization SetupOrganization `json:"organization" validate:"required"`
+	// SetupToken is the code printed in the server log at boot (or SETUP_TOKEN).
+	SetupToken string `json:"setup_token" validate:"required,max=64"`
 }
 
 // ----- Global search -----

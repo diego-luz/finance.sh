@@ -294,8 +294,10 @@
           "name": "Seu nome",
           "email": "E-mail",
           "password": "Senha",
-          "confirmPassword": "Confirmar senha"
-        }
+          "confirmPassword": "Confirmar senha",
+          "setupToken": "Código de instalação"
+        },
+        "setupTokenHint": "Aparece no log do servidor ao iniciar: docker compose logs app"
       },
       "org": {
         "title": "Organização",
@@ -328,7 +330,9 @@
       "invalid_currency": "Moeda inválida.",
       "generic": "Não foi possível concluir a configuração. Tente novamente.",
       "emptyPassword": "Preencha ou gere uma senha antes de copiar.",
-      "copyFailed": "Não foi possível copiar. Selecione e copie manualmente."
+      "copyFailed": "Não foi possível copiar. Selecione e copie manualmente.",
+      "setupTokenRequired": "Informe o código de instalação",
+      "invalid_setup_token": "Código de instalação inválido. Confira no log do servidor (docker compose logs app); ele muda a cada reinício."
     }
   }
 }
