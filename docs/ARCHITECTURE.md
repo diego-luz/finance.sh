@@ -8,12 +8,95 @@ em inglês.
 
 ## Sumário
 
+- [Visão geral](#visão-geral)
 - [Clean Architecture](#clean-architecture)
 - [Modelo de dados multi-organização](#modelo-de-dados-multi-organização)
 - [RBAC e o padrão de query escopada por organização](#rbac-e-o-padrão-de-query-escopada-por-organização)
 - [Fluxo de autenticação](#fluxo-de-autenticação)
 - [Convenção de dinheiro em centavos](#convenção-de-dinheiro-em-centavos)
 - [Como adicionar um novo módulo](#como-adicionar-um-novo-módulo)
+
+---
+
+## Visão geral
+
+Topologia de implantação e camadas de Clean Architecture do backend:
+
+```mermaid
+flowchart TD
+    Proxy["Seu reverse proxy (opcional)<br/>Traefik · Caddy · NPM — termina TLS"] -->|HTTP| App
+    Browser["Navegador / PWA"] -->|"HTTP :8090 (ou via seu proxy)"| App["app — binário Go (:8080)<br/>SPA embutida (go:embed) + API + scheduler goroutine"]
+
+    App --> Postgres[("PostgreSQL :5432<br/>dados + anexos BYTEA<br/>+ refresh tokens + audit log")]
+
+    subgraph Clean["Clean Architecture (backend)"]
+        direction TB
+        H["handlers (HTTP)"] --> S["services (regras de negócio)"]
+        S --> R["repositories (acesso a dados)"]
+        R --> E["entities (modelos de domínio)"]
+    end
+
+    App -.-> Clean
+```
+
+Fluxo: um **único binário Go** serve a SPA (embutida via `go:embed`) em `/` e a API em `/api/` — mesma origem, sem CORS, sem container web separado. Publica **HTTP puro** numa porta; **TLS é responsabilidade do seu reverse proxy** (Traefik/Caddy/Nginx Proxy Manager), padrão do nicho self-hosted (Vaultwarden/Miniflux-style). O backend aplica middlewares (rate limit in-memory, auth, tenant) e delega pros **handlers**, que chamam **services**, que usam **repositories** pra acessar Postgres. Regras de domínio nos **services**; **entities** não conhecem HTTP nem banco. O **scheduler** (recorrência, notificações, purga LGPD) roda como **goroutine in-process**. **Postgres é a única dependência externa** — anexos viram BYTEA e refresh tokens ficam no DB; bloqueio por tentativas, rate limit e cache são in-memory.
+
+### Stack tecnológica
+
+| Camada | Tecnologias |
+|---|---|
+| **Backend** | Go 1.26+ · [chi](https://github.com/go-chi/chi) · [GORM](https://gorm.io) · PostgreSQL 16 · JWT (golang-jwt) · bcrypt · golang-migrate · pquerna/otp (2FA) · excelize + go-pdf/fpdf (export) · httprate (rate limit in-memory) · scheduler goroutine in-process |
+| **Frontend** | React 18 · TypeScript · Vite 6 · Tailwind CSS · React Query (TanStack) · Zustand · Axios · Recharts · React Router · React Hook Form + Zod · react-i18next · vite-plugin-pwa |
+| **Infra** | Docker · Docker Compose · SPA embutida no binário Go (`go:embed`, multi-stage build) · traga seu reverse proxy p/ TLS · GitHub Actions (CI + scans Trivy/gosec/govulncheck/gitleaks) |
+
+> A **landing page** (site de marketing) mora em **repositório/deploy separado** (Vercel/Netlify/Cloudflare Pages) e não faz parte deste stack. A SPA linka pra ela via `VITE_LANDING_URL` quando setado.
+
+### Estrutura do repositório
+
+```
+finance.sh/
+├── backend/                 # App Go (módulo github.com/finance-sh/finance-sh)
+│   ├── cmd/api/             # entrypoint único: API + SPA embutida + scheduler in-process
+│   ├── internal/
+│   │   ├── config/          # carga de configuração via env
+│   │   ├── database/        # conexão, migrations, seed
+│   │   ├── dto/             # data transfer objects
+│   │   ├── entities/        # modelos de domínio (GORM)
+│   │   ├── handlers/        # camada HTTP + router
+│   │   ├── middlewares/     # security headers, auth, tenant, CORS, rate limit
+│   │   ├── repositories/    # acesso a dados
+│   │   ├── services/        # regras de negócio
+│   │   └── web/             # SPA embutida (go:embed) + handler de servir estático
+│   ├── pkg/                 # libs reutilizáveis (crypto, hash, jwt, logger, response, validator, totp, lockout)
+│   ├── docs/openapi.yaml    # API spec escrita à mão
+│   └── Dockerfile           # imagem ÚNICA da app: builda a SPA + embute no binário Go (context = raiz)
+├── frontend/                # SPA React + Vite (buildada e embutida em backend/Dockerfile)
+│   ├── src/
+│   └── public/
+├── scripts/
+│   ├── gen-env.sh           # gera o .env com segredos desta instalação
+│   ├── backup.sh            # pg_dump cifrado (GPG AES-256) + retenção
+│   └── restore.sh           # restauração do dump cifrado
+├── docs/
+│   ├── INSTALACAO.md        # instalação, primeiro acesso, proxy, backup
+│   ├── CONFIGURACAO.md      # variáveis de ambiente
+│   ├── FUNCIONALIDADES.md   # tudo o que a app faz + galeria
+│   ├── ARCHITECTURE.md      # este documento
+│   ├── SECURITY.md          # modelo de ameaças e controles
+│   ├── LGPD.md              # conformidade LGPD (ROPA, direitos, incidentes)
+│   └── ROADMAP.md
+├── .github/
+│   ├── ISSUE_TEMPLATE/      # bug report + feature request + config
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── workflows/ci.yml     # pipeline de CI
+├── docker-compose.yml       # orquestração completa (endurecida)
+├── .env.example             # variáveis de ambiente documentadas
+├── Makefile                 # atalhos de desenvolvimento
+├── LICENSE                  # AGPL-3.0
+├── CODE_OF_CONDUCT.md       # Contributor Covenant 2.1 (EN + pt-BR)
+├── CONTRIBUTING.md          # guia de contribuição
+└── README.md
+```
 
 ---
 
