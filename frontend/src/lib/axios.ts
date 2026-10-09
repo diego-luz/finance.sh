@@ -52,21 +52,45 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 // ---------------------------------------------------------------------------
 // Refresh-token queue. While a refresh is in flight, concurrent 401s wait.
 // ---------------------------------------------------------------------------
-let isRefreshing = false;
-let refreshWaiters: Array<(token: string | null) => void> = [];
+/**
+ * Outcome of a refresh: a new access token, a definitive "the session is
+ * over" (the server rejected the refresh token), or a transient failure
+ * (429, offline, 5xx) that must NOT log the user out.
+ */
+type RefreshResult = { token: string } | { ended: true } | { transient: true };
 
-function notifyWaiters(token: string | null) {
-  refreshWaiters.forEach((cb) => cb(token));
-  refreshWaiters = [];
-}
+let refreshing: Promise<RefreshResult> | null = null;
 
 interface RetriableConfig extends InternalAxiosRequestConfig {
   _retried?: boolean;
 }
 
-async function performRefresh(): Promise<string | null> {
-  const refreshToken = authStore.getRefreshToken();
-  if (!refreshToken) return null;
+/** Seconds since epoch at which a JWT expires (0 when unreadable). */
+function jwtExp(token: string): number {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    return Number(JSON.parse(atob(payload)).exp) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function refreshOnce(failedToken: string | null): Promise<RefreshResult> {
+  // Another tab may already have rotated the tokens: use theirs instead of
+  // presenting the old refresh token again (the backend revokes the whole
+  // session when a rotated refresh token comes back).
+  const stored = authStore.readPersistedTokens();
+  if (
+    stored?.accessToken &&
+    stored.refreshToken &&
+    stored.accessToken !== failedToken &&
+    jwtExp(stored.accessToken) > Date.now() / 1000 + 10
+  ) {
+    authStore.setTokens(stored.accessToken, stored.refreshToken);
+    return { token: stored.accessToken };
+  }
+  const refreshToken = stored?.refreshToken ?? authStore.getRefreshToken();
+  if (!refreshToken) return { ended: true };
   try {
     // Use a bare axios call to avoid recursive interceptors.
     const res = await axios.post<ApiEnvelope<{ access_token: string; refresh_token: string }>>(
@@ -77,20 +101,50 @@ async function performRefresh(): Promise<string | null> {
     if (res.data?.success && res.data.data) {
       const { access_token, refresh_token } = res.data.data;
       authStore.setTokens(access_token, refresh_token);
-      return access_token;
+      return { token: access_token };
     }
-    return null;
-  } catch {
-    return null;
+    return { ended: true };
+  } catch (e) {
+    const status = (e as AxiosError).response?.status;
+    // Only a rejected refresh token ends the session.
+    return status === 400 || status === 401 ? { ended: true } : { transient: true };
   }
+}
+
+/**
+ * One refresh at a time per tab, and across tabs when the browser has Web
+ * Locks: the second tab waits, then finds the first tab's tokens in storage.
+ */
+function performRefresh(failedToken: string | null): Promise<RefreshResult> {
+  if (!refreshing) {
+    const run = () => refreshOnce(failedToken);
+    const locked =
+      typeof navigator !== 'undefined' && navigator.locks?.request
+        ? (navigator.locks.request('finance-sh-refresh', run) as Promise<unknown>).then(
+            (r) => r as RefreshResult,
+          )
+        : run();
+    refreshing = locked.finally(() => {
+      refreshing = null;
+    });
+  }
+  return refreshing;
 }
 
 function forceLogout() {
   authStore.logout();
-  // Redirect to login, preserving nothing sensitive.
+  // Leave the page so nothing financial stays in memory (react-query cache).
   if (window.location.pathname !== '/login') {
     window.location.assign('/login');
+  } else {
+    window.location.reload();
   }
+}
+
+/** The backend error code of a failed response, when it sent one. */
+function errorCode(error: AxiosError<ApiEnvelope<unknown>>): string | undefined {
+  const data = error.response?.data;
+  return data && typeof data === 'object' && 'error' in data ? data.error?.code : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,33 +174,30 @@ api.interceptors.response.use(
       original?.url?.includes('/auth/login') ||
       original?.url?.includes('/auth/register');
 
-    if (status === 401 && original && !original._retried && !isAuthEndpoint) {
+    // Account states the server enforces on every request.
+    const code = errorCode(error);
+    if (status === 403 && code === 'account_disabled') {
+      forceLogout();
+    } else if (status === 403 && code === 'must_change_password') {
+      // ProtectedRoute sends the user to /change-password once flagged.
+      authStore.requirePasswordChange();
+    }
+
+    // A 401 only means "token expired" when the code says so: a wrong
+    // current password (change-password, delete account) is also a 401 and
+    // must not trigger a refresh plus a resend of the same wrong password.
+    const tokenProblem = code === undefined || code === 'unauthorized' || code === 'invalid_token';
+    if (status === 401 && tokenProblem && original && !original._retried && !isAuthEndpoint) {
       original._retried = true;
-
-      if (isRefreshing) {
-        // Queue until the in-flight refresh resolves.
-        return new Promise((resolve, reject) => {
-          refreshWaiters.push((token) => {
-            if (token) {
-              original.headers.set('Authorization', `Bearer ${token}`);
-              resolve(api(original));
-            } else {
-              reject(error);
-            }
-          });
-        });
-      }
-
-      isRefreshing = true;
-      const newToken = await performRefresh();
-      isRefreshing = false;
-      notifyWaiters(newToken);
-
-      if (newToken) {
-        original.headers.set('Authorization', `Bearer ${newToken}`);
+      const failedToken =
+        String(original.headers.get('Authorization') ?? '').replace(/^Bearer\s+/, '') || null;
+      const result = await performRefresh(failedToken);
+      if ('token' in result) {
+        original.headers.set('Authorization', `Bearer ${result.token}`);
         return api(original);
       }
-      forceLogout();
+      if ('ended' in result) forceLogout();
+      // transient: keep the session; the request fails and can be retried
     }
 
     // Normalize the error to ApiRequestError when the envelope is present.
