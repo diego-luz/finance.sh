@@ -448,12 +448,12 @@ Todas em [`.env.example`](.env.example). Resumo:
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | `dev-...` | **Trocar em produção.** |
 | `JWT_ACCESS_TTL_MIN` / `JWT_REFRESH_TTL_DAYS` | `15` / `7` | TTLs dos tokens. |
 | `JWT_SESSION_MAX_DAYS` | `30` | Prazo máximo de uma sessão: renovar o refresh token não a estende além disso. Reapresentar um refresh token já trocado derruba a sessão inteira (sinal de token roubado). |
-| `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MIN` | `5` / `15` | Brute-force lockout. |
+| `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_MIN` | `5` / `15` | Bloqueio por tentativas: no login, por e-mail **e IP** (quem só sabe o e-mail não tranca a conta de outra pessoa); na troca de senha e exclusão de conta, por conta. Fica em memória (um restart zera). Redefinir a senha zera todos. |
 | `SMTP_*` | _(vazio)_ | Sem SMTP → backend loga e-mails no stdout. |
 | `CORS_ORIGINS` | `http://localhost:8090,http://localhost:5173` | Origens permitidas (CSV). Same-origin em prod; relevante só pro Vite dev. |
 | `RATE_LIMIT_RPM` | `120` | Limite de requisições por minuto por IP (token bucket in-memory, por processo). |
-| `AUTH_RATE_LIMIT_RPM` | `30` | Limite mais apertado, por IP, para `/auth/*` e `/setup/initialize` (login, cadastro, esqueci a senha). |
-| `TRUSTED_PROXIES` | loopback e redes privadas | IPs/CIDRs (CSV) cujo `X-Forwarded-For`/`X-Real-IP` é aceito. De outros endereços o cabeçalho é ignorado. |
+| `AUTH_RATE_LIMIT_RPM` | `30` | Limite mais apertado, por IP, para login, cadastro, 2FA, esqueci a senha, verificação de e-mail e `/setup/initialize` (refresh e logout ficam no limite geral). |
+| `TRUSTED_PROXIES` | só loopback | IPs/CIDRs (CSV) cujo `X-Forwarded-For`/`X-Real-IP` é aceito; de outros endereços o cabeçalho é ignorado. Proxy reverso em outro container ou fora do host: ponha a rede dele (ex. `172.16.0.0/12` na rede do Docker), senão todos os clientes dividem o limite do IP do proxy. |
 | `RETENTION_DAYS` | `90` | Dias até purga de dados expirados/excluídos (LGPD). |
 | `TERMS_VERSION` | `1.0` | Versão dos Termos/Privacidade (consentimento versionado). |
 | `SEED` | `false` | Popular dados demo no boot. Recusado com `APP_ENV=production` (as contas demo têm senhas públicas). |

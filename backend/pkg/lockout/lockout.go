@@ -6,6 +6,7 @@ package lockout
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 )
@@ -15,8 +16,9 @@ type Limiter struct {
 	maxAttempts int
 	ttl         time.Duration
 
-	mu  sync.Mutex
-	mem map[string]memEntry
+	mu     sync.Mutex
+	mem    map[string]memEntry
+	writes int
 }
 
 type memEntry struct {
@@ -67,6 +69,9 @@ func (l *Limiter) RegisterFailure(_ context.Context, k string) bool {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.writes++; l.writes%1024 == 0 {
+		l.sweep(time.Now())
+	}
 	e := l.mem[k]
 	if time.Now().After(e.expiresAt) {
 		e = memEntry{}
@@ -75,6 +80,31 @@ func (l *Limiter) RegisterFailure(_ context.Context, k string) bool {
 	e.expiresAt = time.Now().Add(l.ttl)
 	l.mem[k] = e
 	return e.count >= l.maxAttempts
+}
+
+// ResetPrefix clears every key starting with prefix (all the per-IP login
+// counters of one e-mail, after a password reset).
+func (l *Limiter) ResetPrefix(_ context.Context, prefix string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for k := range l.mem {
+		if strings.HasPrefix(k, prefix) {
+			delete(l.mem, k)
+		}
+	}
+}
+
+// sweep drops expired entries; called now and then from RegisterFailure so a
+// stream of failures for made-up e-mails does not grow the map forever.
+func (l *Limiter) sweep(now time.Time) {
+	for k, e := range l.mem {
+		if now.After(e.expiresAt) {
+			delete(l.mem, k)
+		}
+	}
 }
 
 // Reset clears the counter for the key (call on a successful login).

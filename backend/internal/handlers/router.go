@@ -70,7 +70,6 @@ func NewRouter(d Deps) *chi.Mux {
 	// response, since the binary serves the SPA directly.
 	r.Use(middlewares.SecurityHeaders)
 	r.Use(middlewares.CORS(d.Config))
-	r.Use(middlewares.RateLimit(d.Config.RateLimitRPM))
 
 	health := NewHealthHandler()
 	auth := NewAuthHandler(d.Auth)
@@ -107,25 +106,36 @@ func NewRouter(d Deps) *chi.Mux {
 	r.Get("/health", health.Health)
 
 	r.Route("/api/v1", func(r chi.Router) {
+		// Per-IP budget for the API only: counted on every request it was also
+		// spent by the SPA's ~30 lazy chunks, fonts and the service-worker
+		// precache, and a 429 there kept the PWA from installing.
+		r.Use(middlewares.RateLimit(d.Config.RateLimitRPM))
 		// Public
 		r.Get("/health", health.Health)
 		r.Route("/auth", func(r chi.Router) {
-			// its own, tighter per-IP budget: login is locked per e-mail, but
-			// one IP trying a password on many accounts is only stopped here
-			r.Use(middlewares.RateLimit(d.Config.AuthRateLimitRPM))
-			r.Post("/register", auth.Register)
-			r.Post("/login", auth.Login)
+			// Session upkeep stays on the general budget: a 429 on refresh is
+			// not a reason to spend the tight one below, and several people
+			// behind one NAT refresh every ~15 min.
 			r.Post("/refresh", auth.Refresh)
 			r.Post("/logout", auth.Logout)
-			r.Post("/forgot-password", auth.ForgotPassword)
-			r.Post("/reset-password", auth.ResetPassword)
-			// Email verification (soft) and 2FA login completion are public.
-			r.Post("/verify-email", auth.VerifyEmail)
-			r.Post("/verify-email/resend", auth.ResendVerification)
-			r.Post("/2fa/verify", auth.VerifyTwoFactor)
 			// Public flag so the SPA can hide the signup UI when self-service
 			// registration is disabled.
 			r.Get("/registration-open", auth.RegistrationOpen)
+
+			// Credential guessing and e-mail sending get their own, tighter
+			// per-IP budget: login is locked per e-mail and IP, so one IP
+			// trying a password on many accounts is only stopped here.
+			r.Group(func(r chi.Router) {
+				r.Use(middlewares.RateLimit(d.Config.AuthRateLimitRPM))
+				r.Post("/register", auth.Register)
+				r.Post("/login", auth.Login)
+				r.Post("/forgot-password", auth.ForgotPassword)
+				r.Post("/reset-password", auth.ResetPassword)
+				// Email verification (soft) and 2FA login completion are public.
+				r.Post("/verify-email", auth.VerifyEmail)
+				r.Post("/verify-email/resend", auth.ResendVerification)
+				r.Post("/2fa/verify", auth.VerifyTwoFactor)
+			})
 		})
 
 		// First-run setup wizard. PUBLIC (no auth, no tenant): the SPA's bootstrap

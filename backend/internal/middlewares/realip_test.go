@@ -9,7 +9,7 @@ import (
 )
 
 func TestRealIP(t *testing.T) {
-	trusted := ParseTrustedProxies(DefaultTrustedProxies)
+	trusted := ParseTrustedProxies([]string{"127.0.0.0/8", "::1/128", "172.16.0.0/12", "10.0.0.0/8"})
 	cases := []struct {
 		name   string
 		remote string
@@ -49,4 +49,21 @@ func TestParseTrustedProxies(t *testing.T) {
 	got := ParseTrustedProxies([]string{"10.1.2.3", " 192.168.0.0/16 ", "lixo", ""})
 	assert.Len(t, got, 2)
 	assert.Equal(t, "10.1.2.3/32", got[0].String())
+}
+
+func TestRealIPDefaultTrustsLoopbackOnly(t *testing.T) {
+	trusted := ParseTrustedProxies(DefaultTrustedProxies)
+	for remote, want := range map[string]string{
+		"127.0.0.1:4000":    "198.51.100.7", // proxy on the same host
+		"192.168.1.50:4000": "192.168.1.50:4000",
+		"172.18.0.1:4000":   "172.18.0.1:4000", // docker gateway: needs TRUSTED_PROXIES
+	} {
+		var got string
+		h := RealIP(trusted)(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { got = r.RemoteAddr }))
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = remote
+		req.Header.Set("X-Forwarded-For", "198.51.100.7")
+		h.ServeHTTP(httptest.NewRecorder(), req)
+		assert.Equal(t, want, got, remote)
+	}
 }
