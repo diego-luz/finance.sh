@@ -83,8 +83,9 @@ func (h *ImportHandler) Commit(w http.ResponseWriter, r *http.Request) {
 	orgID := middlewares.OrgID(r.Context())
 	userID := middlewares.UserID(r.Context())
 
+	// the reviewed rows of a statement as big as the upload limit, as JSON
 	var req dto.ImportCommitRequest
-	if fields, err := validator.BindJSON(r, &req); err != nil || len(fields) > 0 {
+	if fields, err := validator.BindJSONLimit(r, &req, 2*h.maxBytes+(1<<20)); err != nil || len(fields) > 0 {
 		response.ValidationError(w, fields)
 		return
 	}
