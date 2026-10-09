@@ -78,8 +78,10 @@ Aplicados pelo backend (Go) em toda resposta (o binário serve a SPA diretamente
   `Membership` do usuário.
 
 ### Criptografia de dados
-- **Em campo**: PII sensível (ex.: notas com PII, segredo 2FA) cifrada com
-  **AES-256-GCM** usando `ENCRYPTION_KEY` (base64 de 32 bytes).
+- **Em campo**: as **notas dos lançamentos** e o **segredo do 2FA** são cifrados
+  com **AES-256-GCM** usando `ENCRYPTION_KEY` (base64 de 32 bytes). Os demais
+  dados ficam em texto no banco, **inclusive CPF/CNPJ, e-mail e telefone dos
+  contatos**: é a criptografia do disco (abaixo) que os protege em repouso.
 - **⚠️ Custódia da `ENCRYPTION_KEY` (crítico).** A chave **não** está dentro do
   dump do banco — é o que decifra os campos cifrados. **Perder a chave =** esses
   campos ficam **permanentemente ilegíveis**, mesmo com o `pg_dump` intacto.
@@ -91,15 +93,16 @@ Aplicados pelo backend (Go) em toda resposta (o binário serve a SPA diretamente
   - Backup completo = **dump do banco + a `ENCRYPTION_KEY` + a `BACKUP_PASSPHRASE`**,
     guardados em locais distintos. Perder qualquer uma das chaves → perde o
     respectivo dado.
-  - Em produção o app **recusa subir** com a chave de exemplo/dev (guard); gere
-    uma única: `openssl rand -base64 32`.
+  - O app **recusa subir**, em qualquer ambiente, sem `ENCRYPTION_KEY` ou com a
+    chave de dev publicada; gere uma única: `openssl rand -base64 32`.
 - **Em repouso (disco)**: cabe **ao operador** manter o volume `pgdata` e o
   diretório de backups em **disco criptografado** (LUKS no homelab / volume
   criptografado na VPS). Isso cobre tudo que não é cifrado em campo (WAL,
   índices, dumps).
 - **Backups**: `scripts/backup.sh` produz dumps **cifrados com GPG AES-256**
-  (`--symmetric`), com poda por `RETENTION_DAYS`. Restauração via
-  `scripts/restore.sh`. **Anexos de comprovante estão em BYTEA dentro do
+  (`--symmetric`), gravados só quando o dump termina sem erro e podados por
+  `BACKUP_RETENTION_DAYS`. Restauração via `scripts/restore.sh`, numa
+  transação única e com a app parada. **Anexos de comprovante estão em BYTEA dentro do
   Postgres** (TOAST cuida da compressão out-of-line), portanto o `pg_dump`
   cobre os anexos automaticamente — não há object storage externo a
   preservar à parte.
