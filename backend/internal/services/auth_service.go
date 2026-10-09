@@ -204,9 +204,16 @@ func (s *AuthService) Login(req dto.LoginRequest, meta AuthMeta) (*dto.LoginResu
 
 	user, err := s.users.FindByEmail(email)
 	if err != nil {
-		// Count the failure even for unknown emails to avoid user enumeration.
-		s.lockout.RegisterFailure(ctx, email)
+		// An unknown e-mail must look exactly like a wrong password: the same
+		// bcrypt work (otherwise it answers in ~1 ms instead of ~60) and the
+		// same lockout answer once the budget is spent (it used to stay 401
+		// while a real account turned 423).
+		hash.Check(dummyPasswordHash, req.Password)
+		locked := s.lockout.RegisterFailure(ctx, email)
 		slog.Info("login failed", "email", logger.MaskEmail(email), "reason", "unknown_user")
+		if locked {
+			return nil, ErrAccountLocked
+		}
 		return nil, ErrInvalidCredentials
 	}
 	if !hash.Check(user.PasswordHash, req.Password) {
@@ -324,6 +331,16 @@ func (s *AuthService) Refresh(rawToken string, meta AuthMeta) (*dto.AuthResponse
 	}
 	return s.issueTokensIn(user, org, role, meta, familia, fim)
 }
+
+// dummyPasswordHash is a bcrypt hash (default cost) of a random string, compared
+// against when the e-mail does not exist so both paths cost the same.
+var dummyPasswordHash = func() string {
+	h, err := hash.Password(uuid.NewString())
+	if err != nil {
+		panic(err)
+	}
+	return h
+}()
 
 // checkPasswordLimited verifies a logged-in user's current password under the
 // same per-account attempt budget as login. Without it, a stolen access token
