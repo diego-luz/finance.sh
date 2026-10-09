@@ -92,7 +92,7 @@ body:
     attributes:
       label: Confirmação
       options:
-        - label: Li o [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md).
+        - label: Li o [CODE_OF_CONDUCT.md](https://github.com/diego-luz/finance.sh/blob/main/CODE_OF_CONDUCT.md).
           required: true
         - label: Pesquisei e este pedido não está duplicado.
           required: true

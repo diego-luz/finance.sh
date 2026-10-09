@@ -24,8 +24,8 @@ END_MARK="<!-- CONTRIBUTORS:END -->"
 
 # Mantenedores listados separadamente — não duplicar na tabela.
 MAINTAINERS_EMAILS=(
-  "diego@finance.sh"
-  "diegoalvescs@gmail.com"
+  "diego.freiree@gmail.com"
+  "161847415+diego-luz@users.noreply.github.com"
 )
 
 # Bots conhecidos que não entram na lista.
