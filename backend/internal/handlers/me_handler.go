@@ -34,6 +34,10 @@ func (h *MeHandler) SetupTwoFactor(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "not_found", "Usuário não encontrado")
 			return
 		}
+		if errors.Is(err, services.Err2FAAlreadyEnabled) {
+			response.Error(w, http.StatusConflict, "2fa_already_enabled", err.Error())
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "internal_error", "Erro ao iniciar configuração do 2FA")
 		return
 	}
