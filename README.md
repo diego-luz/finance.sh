@@ -566,7 +566,7 @@ make backup                                       # gera backups/finance_sh-...s
 make restore FILE=backups/finance_sh-AAAAMMDD-HHMMSS.sql.gpg
 ```
 
-Dumps cifrados com **GPG AES-256** e podados por `RETENTION_DAYS`. Guarde o diretório de backups e o volume `pgdata` em **disco criptografado** (LUKS / volume cloud criptografado) — cobre criptografia em repouso do que não é cifrado em campo.
+Dumps cifrados com **GPG AES-256** e podados por `BACKUP_RETENTION_DAYS` (padrão 90; independente do `RETENTION_DAYS` da purga LGPD). Guarde o diretório de backups e o volume `pgdata` em **disco criptografado** (LUKS / volume cloud criptografado) — cobre criptografia em repouso do que não é cifrado em campo.
 
 ### ⚠️ Faça backup da `ENCRYPTION_KEY` (crítico)
 
