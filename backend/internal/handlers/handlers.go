@@ -55,6 +55,8 @@ func writeServiceError(w http.ResponseWriter, err error) bool {
 		response.Error(w, http.StatusUnprocessableEntity, "invalid_rule", err.Error())
 	case errors.Is(err, services.ErrInvalidRecurrence):
 		response.Error(w, http.StatusUnprocessableEntity, "invalid_recurrence", err.Error())
+	case errors.Is(err, services.ErrTooManyRows):
+		response.Error(w, http.StatusUnprocessableEntity, "too_many_rows", err.Error())
 	case errors.Is(err, services.ErrEmptyImport):
 		response.Error(w, http.StatusUnprocessableEntity, "empty_import", err.Error())
 	case errors.Is(err, services.ErrUnsupportedFormat):

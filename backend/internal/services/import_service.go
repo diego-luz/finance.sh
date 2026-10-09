@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -21,6 +22,14 @@ var ErrEmptyImport = errors.New("nenhum lançamento encontrado no arquivo")
 // ErrUnsupportedFormat is returned when the import format is not ofx/csv/auto
 // or auto-detection fails. Handlers map it to HTTP 422.
 var ErrUnsupportedFormat = errors.New("formato de arquivo não suportado")
+
+// MaxImportRows caps one statement import. A 10 MB CSV of short lines is ~700k
+// rows, and each row used to cost queries: one request could keep Postgres busy
+// for minutes. Real statements are far below this.
+const MaxImportRows = 5000
+
+// ErrTooManyRows is returned when a statement exceeds MaxImportRows (HTTP 422).
+var ErrTooManyRows = fmt.Errorf("arquivo com mais de %d lançamentos; divida-o por período", MaxImportRows)
 
 // ImportService parses bank statements (OFX/CSV) and turns them into
 // transactions in a stateless two-step flow: Preview parses + flags duplicates
@@ -68,6 +77,9 @@ func (s *ImportService) Preview(orgID, accountID uuid.UUID, format string, file 
 	if len(rows) == 0 {
 		return dto.ImportPreview{}, ErrEmptyImport
 	}
+	if len(rows) > MaxImportRows {
+		return dto.ImportPreview{}, ErrTooManyRows
+	}
 
 	// Batch-check existing external ids for the org+account (single query).
 	ids := make([]string, 0, len(rows))
@@ -80,17 +92,36 @@ func (s *ImportService) Preview(orgID, accountID uuid.UUID, format string, file 
 	if err != nil {
 		return dto.ImportPreview{}, err
 	}
+	// rows without an external id are matched by signature: one query for the
+	// statement's date range instead of one per row
+	desde, ate := rows[0].Date, rows[0].Date
+	for _, r := range rows {
+		if r.Date.Before(desde) {
+			desde = r.Date
+		}
+		if r.Date.After(ate) {
+			ate = r.Date
+		}
+	}
+	assinaturas, err := s.txs.SignaturesInRange(orgID, accountID, desde, ate)
+	if err != nil {
+		return dto.ImportPreview{}, err
+	}
+	var matcher *Matcher
+	if s.categorization != nil {
+		matcher = s.categorization.NewMatcher(orgID)
+	}
 
 	preview := dto.ImportPreview{Format: resolved, Rows: make([]dto.ImportRowDTO, 0, len(rows))}
 	// In-file dedup: a statement may repeat the same row; flag the later one.
 	seen := make(map[string]bool, len(rows))
 	for i, r := range rows {
-		dupe, reason := s.classifyRow(orgID, accountID, r, existing, seen)
+		dupe, reason := classifyRow(r, existing, seen, assinaturas)
 		// Suggest a category for the row (rules + history). Best-effort: a failure
 		// just leaves the suggestion empty.
 		var suggested string
-		if s.categorization != nil {
-			if id, _ := s.categorization.Match(orgID, r.Description, r.Type); id != nil {
+		if matcher != nil {
+			if id := matcher.Match(r.Description, r.Type); id != nil {
 				suggested = id.String()
 			}
 		}
@@ -119,7 +150,7 @@ func (s *ImportService) Preview(orgID, accountID uuid.UUID, format string, file 
 // (1) an existing transaction with the same ExternalID (org+account); (2) the
 // same ExternalID already seen earlier in this file; (3) when there is NO
 // external id, an existing transaction with the same date+amount+description.
-func (s *ImportService) classifyRow(orgID, accountID uuid.UUID, r imports.ParsedRow, existing map[string]bool, seen map[string]bool) (bool, string) {
+func classifyRow(r imports.ParsedRow, existing, seen, assinaturas map[string]bool) (bool, string) {
 	if r.ExternalID != "" {
 		if existing[r.ExternalID] {
 			return true, "já importado anteriormente"
@@ -131,8 +162,7 @@ func (s *ImportService) classifyRow(orgID, accountID uuid.UUID, r imports.Parsed
 		return false, ""
 	}
 	// No external id: fall back to a signature match against the DB.
-	dupe, err := s.txs.ExistsBySignature(orgID, accountID, r.Date, r.AmountCents, r.Description)
-	if err == nil && dupe {
+	if assinaturas[repositories.SignatureKey(r.Date, r.AmountCents, r.Description)] {
 		return true, "lançamento equivalente já existe"
 	}
 	return false, ""
@@ -145,6 +175,9 @@ func (s *ImportService) classifyRow(orgID, accountID uuid.UUID, r imports.Parsed
 func (s *ImportService) Commit(orgID, userID, accountID uuid.UUID, categoryID *uuid.UUID, rows []dto.ImportCommitRow) (created, skipped int, err error) {
 	if len(rows) == 0 {
 		return 0, 0, ErrEmptyImport
+	}
+	if len(rows) > MaxImportRows {
+		return 0, 0, ErrTooManyRows
 	}
 	if _, err := s.accounts.FindByID(orgID, accountID); err != nil {
 		if errors.Is(err, repositories.ErrNotFound) {
@@ -174,6 +207,10 @@ func (s *ImportService) Commit(orgID, userID, accountID uuid.UUID, categoryID *u
 		return 0, 0, err
 	}
 
+	var matcher *Matcher
+	if categoryID == nil && s.categorization != nil {
+		matcher = s.categorization.NewMatcher(orgID)
+	}
 	seen := make(map[string]bool, len(rows))
 	toCreate := make([]*entities.Transaction, 0, len(rows))
 	for _, r := range rows {
@@ -200,8 +237,8 @@ func (s *ImportService) Commit(orgID, userID, accountID uuid.UUID, categoryID *u
 		// is absent, auto-assign via the categorizer (rules + history). Best-effort:
 		// a non-match leaves the row uncategorized.
 		rowCategory := categoryID
-		if rowCategory == nil && s.categorization != nil {
-			if id, _ := s.categorization.Match(orgID, r.Description, r.Type); id != nil {
+		if rowCategory == nil && matcher != nil {
+			if id := matcher.Match(r.Description, r.Type); id != nil {
 				rowCategory = id
 			}
 		}
