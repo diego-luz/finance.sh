@@ -725,15 +725,19 @@ func (s *AuthService) checkSecondFactor(user *entities.User, code string) bool {
 	if code == "" {
 		return false
 	}
-	if secret := user.TwoFactorSecret.String(); secret != "" && totp.Validate(code, secret) {
-		return true
+	if secret := user.TwoFactorSecret.String(); secret != "" {
+		if passo, ok := totp.ValidateStep(code, secret, time.Now()); ok {
+			// each 30-second code is good once
+			aceito, err := s.users.ClaimTOTPStep(user.ID, passo)
+			return err == nil && aceito
+		}
 	}
 	rc, err := s.users.FindRecoveryCode(user.ID, hash.SHA256(code))
 	if err != nil {
 		return false
 	}
-	_ = s.users.UseRecoveryCode(rc.ID)
-	return true
+	usado, err := s.users.UseRecoveryCode(rc.ID)
+	return err == nil && usado
 }
 
 // primaryOrg returns the user's first membership organization (used right after
