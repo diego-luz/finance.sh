@@ -35,6 +35,9 @@ func Next(from time.Time, freq string, interval int) time.Time {
 	}
 }
 
+// AddMonthsClamped is addMonthsClamped for other packages (installments).
+func AddMonthsClamped(t time.Time, months int) time.Time { return addMonthsClamped(t, months) }
+
 // addMonthsClamped adds `months` calendar months to t, clamping the day of month
 // to the number of days in the target month so the date never rolls over into the
 // next month (which time.AddDate would do for e.g. Jan 31 + 1 month).
