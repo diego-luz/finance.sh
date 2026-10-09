@@ -55,8 +55,9 @@ read -r CONFIRM
 
 echo "[restore] Decrypting $FILE and loading into '$DB_NAME'..."
 
-# gpg decrypt (host) -> psql (inside container).
-gpg --batch --yes --decrypt --passphrase "$BACKUP_PASSPHRASE" "$FILE" \
+# gpg decrypt (host) -> psql (inside container). Passphrase on fd 3, not in argv
+# (visible to other users in ps).
+gpg --batch --yes --pinentry-mode loopback --decrypt --passphrase-fd 3 "$FILE" 3<<<"$BACKUP_PASSPHRASE" \
   | docker exec -i "$PG_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME"
 
 echo "[restore] Done."
