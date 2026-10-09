@@ -59,9 +59,11 @@ OUT="$BACKUP_DIR/finance_sh-${DB_NAME}-${TS}.sql.gpg"
 echo "[backup] Dumping '$DB_NAME' from container '$PG_CONTAINER' -> $OUT"
 
 # pg_dump (inside the container) -> gpg symmetric AES256 (on the host) -> file.
+# The passphrase goes in on file descriptor 3, not on the command line, where
+# any local user could read it from ps or /proc/<pid>/cmdline.
 docker exec -i "$PG_CONTAINER" pg_dump -U "$DB_USER" -d "$DB_NAME" --clean --if-exists \
-  | gpg --batch --yes --symmetric --cipher-algo AES256 \
-        --passphrase "$BACKUP_PASSPHRASE" -o "$OUT"
+  | gpg --batch --yes --pinentry-mode loopback --symmetric --cipher-algo AES256 \
+        --passphrase-fd 3 -o "$OUT" 3<<<"$BACKUP_PASSPHRASE"
 
 echo "[backup] Wrote $(du -h "$OUT" | cut -f1) -> $OUT"
 
