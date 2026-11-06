@@ -1,6 +1,6 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { NavLink, Link, Outlet } from 'react-router-dom';
+import { NavLink, Link, Outlet } from 'react-router';
 import {
   LayoutDashboard,
   ArrowLeftRight,

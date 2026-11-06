@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router';
 import { Spinner } from '@/components/ui';
 import { SetupGate } from './ProtectedRoute';
 

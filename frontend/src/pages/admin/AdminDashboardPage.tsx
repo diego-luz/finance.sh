@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router';
 import { Building2, Users, ArrowLeftRight } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { SkeletonCard, StatCard } from '@/components/ui';

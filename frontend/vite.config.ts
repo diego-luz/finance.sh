@@ -80,7 +80,7 @@ export default defineConfig({
         // Split large vendor libraries into dedicated chunks so the initial
         // bundle stays small and chunks are cached independently.
         manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
+          react: ['react', 'react-dom', 'react-router'],
           recharts: ['recharts'],
           'data-vendor': ['@tanstack/react-query', 'axios', 'zustand'],
           'form-vendor': ['react-hook-form', '@hookform/resolvers', 'zod'],

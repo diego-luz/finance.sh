@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Mail, ArrowLeft, MailCheck, ServerCog } from 'lucide-react';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { Button, Input } from '@/components/ui';
