@@ -27,10 +27,10 @@ const schema = z
     category_id: z.string().optional(),
     contact_id: z.string().optional(),
     frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
-    interval: z.coerce.number().int().min(1).max(999),
+    interval: z.coerce.number<number>().int().min(1).max(999),
     start_date: z.string().min(1, 'Informe a data de início'),
     end_date: z.string().optional(),
-    max_occurrences: z.coerce.number().int().min(0).max(9999),
+    max_occurrences: z.coerce.number<number>().int().min(0).max(9999),
     paid: z.boolean(),
     active: z.boolean(),
   })

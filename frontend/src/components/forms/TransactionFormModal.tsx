@@ -34,7 +34,7 @@ const schema = z
     contact_id: z.string().optional(),
     paid: z.boolean(),
     notes: z.string().optional(),
-    installments: z.coerce.number().int().min(1).max(360),
+    installments: z.coerce.number<number>().int().min(1).max(360),
     tag_ids: z.array(z.string()),
   })
   .refine(
