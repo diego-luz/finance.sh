@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router';
 import { UserPlus, Users, Trash2, Clock, ShieldAlert, X } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import {

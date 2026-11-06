@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { Download, Trash2, ShieldAlert, FileJson } from 'lucide-react';
 import { Card, CardHeader, Button, Input, Modal } from '@/components/ui';
 import { useExportMyData, useDeleteMyAccount } from '@/hooks';

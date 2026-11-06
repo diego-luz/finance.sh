@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import { CheckCircle2, XCircle, Loader2, Mail } from 'lucide-react';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { useVerifyEmail } from '@/hooks';

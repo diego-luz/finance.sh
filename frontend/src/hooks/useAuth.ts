@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { authService } from '@/services';
 import { useAuthStore } from '@/stores/authStore';
 import { useToast } from '@/contexts/ToastContext';

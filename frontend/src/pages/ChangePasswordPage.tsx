@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Lock, KeyRound, LogOut, ShieldAlert } from 'lucide-react';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { Button, Input } from '@/components/ui';
