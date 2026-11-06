@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>finance.sh — Controle financeiro open-source e self-hosted</title>
+<meta name="description" content="Controle financeiro open-source e self-hosted, feito no Brasil. Para pessoa física, MEI e microempresa. Seus dados no seu servidor. Docker, AGPL-3.0, sem lock-in." />
+<meta name="theme-color" content="#0f1115" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="finance.sh — Controle financeiro open-source e self-hosted" />
+<meta property="og:description" content="Pessoa física, MEI e microempresa. Seus dados no seu servidor, em pt-BR. Docker, AGPL-3.0, sem lock-in." />
+<meta property="og:image" content="https://diego-luz.github.io/finance.sh/screenshots/02-dashboard.png" />
+<meta property="og:url" content="https://diego-luz.github.io/finance.sh/" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet" />
+<script>
+  // Apply the saved theme before first paint to avoid a flash.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('fsh-theme'); } catch (e) {}
+    if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<style>
+  :root {
+    --primary: #10b981;
+    --primary-strong: #34d399;
+    --primary-soft: rgba(16, 185, 129, 0.12);
+    --primary-line: rgba(16, 185, 129, 0.35);
+    --on-primary: #04130d;
+    --radius: 16px;
+    --maxw: 1180px;
+    --font-head: 'Manrope', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  :root[data-theme='dark'] {
+    --bg: #0f1115;
+    --bg-alt: #13161b;
+    --surface: #171a20;
+    --surface-2: #1d2128;
+    --border: #262b33;
+    --text: #f3f4f6;
+    --text-2: #a7adb7;
+    --text-3: #6b7280;
+    --code-bg: #0d1520;
+    --code-text: #5eead4;
+    --grid: rgba(255, 255, 255, 0.025);
+    --glow: rgba(16, 185, 129, 0.16);
+    --shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.7);
+  }
+  :root[data-theme='light'] {
+    --bg: #f8faf9;
+    --bg-alt: #f0f4f2;
+    --surface: #ffffff;
+    --surface-2: #f3f5f4;
+    --border: #e2e8e5;
+    --text: #0f1115;
+    --text-2: #4b5563;
+    --text-3: #6b7280;
+    --code-bg: #0f1a24;
+    --code-text: #5eead4;
+    --grid: rgba(15, 17, 21, 0.035);
+    --glow: rgba(16, 185, 129, 0.14);
+    --shadow: 0 30px 70px -30px rgba(15, 40, 30, 0.3);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 80px; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  img { max-width: 100%; height: auto; display: block; }
+  a { color: inherit; text-decoration: none; }
+  h1, h2, h3 { font-family: var(--font-head); letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
+  p { margin: 0; }
+  code, .mono { font-family: var(--font-mono); }
+  :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+  .skip { position: absolute; left: -999px; top: 8px; background: var(--primary); color: var(--on-primary); padding: 8px 14px; border-radius: 8px; z-index: 100; }
+  .skip:focus { left: 8px; }
+
+  /* ---------- Header ---------- */
+  header.top {
+    position: sticky; top: 0; z-index: 50;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: saturate(160%) blur(12px);
+    -webkit-backdrop-filter: saturate(160%) blur(12px);
+    border-bottom: 1px solid transparent;
+    transition: border-color .2s;
+  }
+  header.top.scrolled { border-bottom-color: var(--border); }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 68px; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; font: 700 21px var(--font-head); letter-spacing: -0.02em; }
+  .brand img { width: 32px; height: 32px; }
+  .links { display: flex; gap: 28px; font-size: 15px; color: var(--text-2); }
+  .links a:hover { color: var(--text); }
+  .links a.gh { display: inline-flex; align-items: center; gap: 6px; }
+  .actions { display: flex; align-items: center; gap: 10px; }
+  .icon-btn {
+    width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-2); cursor: pointer;
+  }
+  .icon-btn:hover { color: var(--text); }
+  .icon-btn svg { width: 18px; height: 18px; }
+  .menu-btn { display: none; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 44px; padding: 0 20px; border-radius: 12px; font: 600 15px var(--font-head);
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    cursor: pointer; transition: transform .15s, box-shadow .15s, background .15s; white-space: nowrap;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn svg { width: 17px; height: 17px; }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); box-shadow: 0 8px 30px -8px rgba(16,185,129,.6); }
+  .btn.primary:hover { box-shadow: 0 10px 36px -6px rgba(16,185,129,.75); }
+  .btn.lg { height: 52px; padding: 0 26px; font-size: 16px; }
+  .btn.sm { height: 40px; padding: 0 16px; font-size: 14px; }
+
+  /* ---------- Hero ---------- */
+  .hero { position: relative; padding: 96px 0 40px; text-align: center; isolation: isolate; overflow-x: clip; }
+  .hero::before {
+    content: ''; position: absolute; inset: 0; z-index: -1;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 30%, transparent 75%);
+  }
+  .hero::after {
+    content: ''; position: absolute; left: 50%; top: 52%; width: 900px; height: 500px; transform: translateX(-50%); z-index: -1;
+    background: radial-gradient(closest-side, var(--glow), transparent);
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 999px;
+    border: 1px solid var(--primary-line); background: var(--primary-soft); color: var(--primary-strong);
+    font-size: 14px; font-weight: 500;
+  }
+  :root[data-theme='light'] .pill { color: #047857; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 4px rgba(16,185,129,.18); }
+  .hero h1 { font-size: clamp(40px, 7vw, 80px); font-weight: 800; margin: 28px auto 24px; max-width: 16ch; }
+  .hero h1 .accent { color: var(--primary); }
+  .nb { white-space: nowrap; }
+  .lead { font-size: clamp(17px, 2vw, 20px); color: var(--text-2); max-width: 640px; margin: 0 auto; }
+  .cta { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
+
+  .cmds { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 28px; }
+  .cmd {
+    display: inline-flex; align-items: center; gap: 12px; padding: 9px 12px 9px 16px; border-radius: 10px;
+    background: var(--code-bg); border: 1px solid var(--border); color: var(--code-text);
+    font: 14px var(--font-mono); max-width: 100%;
+  }
+  .cmd .ps { color: #64748b; user-select: none; }
+  .cmd span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy {
+    flex: none; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center;
+    background: transparent; border: 0; color: #64748b; cursor: pointer;
+  }
+  .copy:hover { color: #e2e8f0; background: rgba(255,255,255,.06); }
+  .copy svg { width: 15px; height: 15px; }
+  .copy.ok { color: var(--primary); }
+
+  .shot { position: relative; margin: 64px auto 0; max-width: 1080px; }
+  .frame {
+    border-radius: 20px; padding: 10px; background: linear-gradient(180deg, var(--primary-line), transparent 60%);
+    box-shadow: var(--shadow);
+  }
+  .frame-inner { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
+  .frame-bar { display: flex; align-items: center; gap: 7px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .frame-bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--border); }
+  .frame-bar .url { margin-left: 12px; font: 12px var(--font-mono); color: var(--text-3); }
+  .tag {
+    position: absolute; display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border); font: 600 14px var(--font-head);
+    box-shadow: 0 12px 30px -12px rgba(0,0,0,.5);
+  }
+  .tag svg { width: 17px; height: 17px; color: var(--primary); }
+  .tag.l { left: -22px; top: 46%; transform: rotate(-3deg); }
+  .tag.r { right: -22px; top: 24px; transform: rotate(3deg); }
+
+  /* ---------- Sections ---------- */
+  section.block { padding: 110px 0; }
+  section.alt { background: var(--bg-alt); border-block: 1px solid var(--border); }
+  .head { text-align: center; max-width: 720px; margin: 0 auto 56px; }
+  .eyebrow { font: 700 13px var(--font-head); letter-spacing: .22em; text-transform: uppercase; color: var(--primary); }
+  .head h2 { font-size: clamp(30px, 4.4vw, 48px); font-weight: 800; margin: 14px 0 16px; }
+  .head p { font-size: 18px; color: var(--text-2); }
+
+  .grid { display: grid; gap: 20px; }
+  .grid > * { min-width: 0; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px;
+    transition: border-color .2s, transform .2s;
+  }
+  .card:hover { border-color: var(--primary-line); }
+  .ico {
+    width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center;
+    background: var(--primary-soft); color: var(--primary); margin-bottom: 20px;
+  }
+  .ico svg { width: 22px; height: 22px; }
+  .card h3 { font-size: 20px; font-weight: 700; margin-bottom: 10px; }
+  .card p { color: var(--text-2); font-size: 15.5px; }
+  .card ul { margin: 14px 0 0; padding: 0; list-style: none; color: var(--text-2); font-size: 14.5px; }
+  .card li { padding-left: 22px; position: relative; margin-top: 6px; }
+  .card li::before {
+    content: ''; position: absolute; left: 2px; top: 8px; width: 10px; height: 6px;
+    border-left: 2px solid var(--primary); border-bottom: 2px solid var(--primary); transform: rotate(-45deg);
+  }
+
+  /* Steps */
+  .step { position: relative; display: flex; flex-direction: column; }
+  .step .num { font: 800 64px/1 var(--font-head); color: var(--primary); opacity: .22; letter-spacing: -0.04em; }
+  .step .top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; }
+  .step .ico { margin: 0; }
+  .term { margin-top: auto; padding-top: 22px; }
+  .term-box { background: var(--code-bg); border: 1px solid #1e293b; border-radius: 12px; overflow: hidden; }
+  .term-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid #1e293b; }
+  .term-bar i { width: 9px; height: 9px; border-radius: 50%; }
+  .term-bar i:nth-child(1) { background: #ef4444; } .term-bar i:nth-child(2) { background: #eab308; } .term-bar i:nth-child(3) { background: #10b981; }
+  .term-bar .lbl { margin-left: auto; font: 11px var(--font-mono); color: #64748b; }
+  .term-bar .copy { width: 24px; height: 24px; }
+  .term pre { margin: 0; padding: 14px 16px; font: 13.5px/1.7 var(--font-mono); color: var(--code-text); overflow-x: auto; }
+  .term pre .ps { color: #64748b; user-select: none; }
+  .term .note { margin-top: 12px; font: 12.5px var(--font-mono); color: var(--text-3); }
+  .foot-note { text-align: center; color: var(--text-2); margin: 44px auto 0; max-width: 760px; }
+
+  /* Gallery */
+  .tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 28px; }
+  .tab {
+    padding: 9px 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-2); font: 500 14px var(--font-body); cursor: pointer;
+  }
+  .tab[aria-selected='true'] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+  .gallery-view { max-width: 1040px; margin: 0 auto; }
+  .gallery-view img { width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; object-position: top; background: var(--surface-2); }
+  .caption { text-align: center; color: var(--text-2); margin-top: 18px; font-size: 15px; min-height: 1.6em; }
+
+  /* Audience */
+  .who h3 { font-size: 19px; }
+
+  /* Security */
+  .sec { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+  .sec .head { text-align: left; margin: 0; }
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .check { display: flex; gap: 12px; padding: 18px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); }
+  .check svg { flex: none; width: 20px; height: 20px; color: var(--primary); margin-top: 2px; }
+  .check b { display: block; font: 700 15px var(--font-head); }
+  .check span { color: var(--text-2); font-size: 14px; }
+  .sec .links-inline { margin-top: 26px; display: flex; gap: 12px; flex-wrap: wrap; }
+
+  /* FAQ */
+  .faq { max-width: 820px; margin: 0 auto; }
+  details {
+    border: 1px solid var(--border); border-radius: 14px; background: var(--surface); margin-bottom: 12px;
+    transition: border-color .2s;
+  }
+  details[open] { border-color: var(--primary-line); }
+  summary {
+    list-style: none; cursor: pointer; padding: 20px 24px; font: 600 17px var(--font-head);
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after {
+    content: '+'; flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+    background: var(--primary-soft); color: var(--primary); font: 600 20px/1 var(--font-body); transition: transform .2s;
+  }
+  details[open] summary::after { transform: rotate(45deg); }
+  details .ans { padding: 0 24px 22px; color: var(--text-2); }
+  details .ans code { font-size: 13.5px; background: var(--surface-2); padding: 2px 6px; border-radius: 6px; color: var(--text); }
+  details .ans a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Final CTA */
+  .final {
+    text-align: center; border-radius: 28px; padding: 72px 32px; position: relative; overflow: hidden; isolation: isolate;
+    background: var(--surface); border: 1px solid var(--primary-line);
+  }
+  .final::before {
+    content: ''; position: absolute; inset: 0; z-index: -1;
+    background: radial-gradient(ellipse 60% 80% at 50% 0%, var(--glow), transparent 70%);
+  }
+  .final h2 { font-size: clamp(30px, 4.4vw, 48px); font-weight: 800; margin-bottom: 16px; }
+  .final p { color: var(--text-2); font-size: 18px; max-width: 560px; margin: 0 auto; }
+
+  /* Footer */
+  footer { border-top: 1px solid var(--border); padding: 44px 0; color: var(--text-3); font-size: 14px; }
+  footer .row { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+  footer nav { display: flex; gap: 22px; flex-wrap: wrap; }
+  footer a:hover { color: var(--text); }
+
+  /* Mobile menu */
+  .mobile-menu { display: none; }
+
+  @media (max-width: 960px) {
+    .links { display: none; }
+    .menu-btn { display: grid; }
+    .actions .btn.sm { display: none; }
+    .mobile-menu {
+      position: fixed; inset: 68px 0 auto 0; background: var(--bg); border-bottom: 1px solid var(--border);
+      padding: 12px 16px 20px; flex-direction: column; z-index: 49;
+    }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu a { padding: 14px 8px; border-bottom: 1px solid var(--border); font: 600 16px var(--font-head); }
+    .mobile-menu .btn { margin-top: 16px; }
+    .g3, .g4 { grid-template-columns: 1fr 1fr; }
+    .sec { grid-template-columns: 1fr; gap: 36px; }
+    .tag { display: none; }
+  }
+  @media (max-width: 640px) {
+    .wrap { padding: 0 16px; }
+    .hero { padding: 64px 0 24px; }
+    section.block { padding: 76px 0; }
+    .g3, .g4, .checks { grid-template-columns: 1fr; }
+    .cta .btn { width: 100%; }
+    .cmd { width: 100%; justify-content: space-between; }
+    .shot { margin-top: 44px; }
+    .shot img { aspect-ratio: 780 / 1200; object-fit: cover; object-position: top; }
+    .frame-bar .url { display: none; }
+    .frame { padding: 6px; border-radius: 14px; }
+    .final { padding: 52px 20px; border-radius: 20px; }
+    .card { padding: 22px; }
+    .head { margin-bottom: 40px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Pular para o conteúdo</a>
+
+<!-- Inline SVG icon sprite (Lucide-style strokes) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-github" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.3a.6.6 0 0 1 1 0l2.7 5.5 6 .9a.6.6 0 0 1 .3 1l-4.4 4.3 1 6a.6.6 0 0 1-.8.6L12 17.8l-5.4 2.8a.6.6 0 0 1-.8-.6l1-6-4.4-4.3a.6.6 0 0 1 .3-1l6-.9z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 0-2 2v1"/><path d="M6 9v6"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+    <symbol id="i-briefcase" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></symbol>
+    <symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/></symbol>
+  </defs>
+</svg>
+
+<header class="top" id="top">
+  <div class="wrap nav">
+    <a class="brand" href="#main" aria-label="finance.sh — início">
+      <img src="favicon.svg" alt="" width="32" height="32" />
+      finance.sh
+    </a>
+    <nav class="links" aria-label="Principal">
+      <a href="#funcionalidades">Funcionalidades</a>
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#pra-quem-e">Pra quem é</a>
+      <a href="#seguranca">Segurança</a>
+      <a href="#faq">FAQ</a>
+      <a class="gh" href="https://github.com/diego-luz/finance.sh"><svg width="16" height="16"><use href="#i-github"/></svg>GitHub</a>
+    </nav>
+    <div class="actions">
+      <button class="icon-btn" id="theme" type="button" aria-label="Alternar tema claro/escuro">
+        <svg><use href="#i-sun"/></svg>
+      </button>
+      <a class="btn primary sm" href="https://github.com/diego-luz/finance.sh"><svg><use href="#i-star"/></svg>Star</a>
+      <button class="icon-btn menu-btn" id="menu" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="mobile-menu">
+        <svg><use href="#i-menu"/></svg>
+      </button>
+    </div>
+  </div>
+  <nav class="mobile-menu" id="mobile-menu" aria-label="Menu">
+    <a href="#funcionalidades">Funcionalidades</a>
+    <a href="#como-funciona">Como funciona</a>
+    <a href="#pra-quem-e">Pra quem é</a>
+    <a href="#seguranca">Segurança</a>
+    <a href="#faq">FAQ</a>
+    <a class="btn primary" href="https://github.com/diego-luz/finance.sh"><svg><use href="#i-github"/></svg>Ver no GitHub</a>
+  </nav>
+</header>
+
+<main id="main">
+  <!-- ================= HERO ================= -->
+  <section class="hero">
+    <div class="wrap">
+      <span class="pill"><span class="dot"></span>v0.1.0 · AGPL-3.0 · Disponível para self-hosted</span>
+      <h1>Controle financeiro <span class="accent nb">open-source.</span> <span class="nb">Self-hosted.</span></h1>
+      <p class="lead">Pessoa física, MEI e microempresa. Seus dados no seu servidor — em pt-BR. Docker, AGPL, sem lock-in.</p>
+      <div class="cta">
+        <a class="btn primary lg" href="https://github.com/diego-luz/finance.sh"><svg><use href="#i-star"/></svg>Star no GitHub</a>
+        <a class="btn lg" href="#como-funciona">Deploy em 1 minuto<svg><use href="#i-arrow"/></svg></a>
+      </div>
+      <div class="cmds">
+        <div class="cmd"><span class="t"><span class="ps">$ </span>git clone https://github.com/diego-luz/finance.sh</span><button class="copy" type="button" data-copy="git clone https://github.com/diego-luz/finance.sh" aria-label="Copiar comando"><svg><use href="#i-copy"/></svg></button></div>
+        <div class="cmd"><span class="t"><span class="ps">$ </span>docker compose up -d</span><button class="copy" type="button" data-copy="docker compose up -d" aria-label="Copiar comando"><svg><use href="#i-copy"/></svg></button></div>
+      </div>
+
+      <div class="shot">
+        <div class="frame">
+          <div class="frame-inner">
+            <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i><span class="url">localhost:8090</span></div>
+            <picture>
+              <source media="(max-width: 640px)" srcset="screenshots/09-mobile-dashboard.png" width="780" height="1688" />
+              <img src="screenshots/02-dashboard.png" alt="Dashboard do finance.sh com saldo, receitas, despesas e gráficos de fluxo de caixa" width="1440" height="900" />
+            </picture>
+          </div>
+        </div>
+        <span class="tag l"><svg><use href="#i-github"/></svg>AGPL-3.0</span>
+        <span class="tag r"><svg><use href="#i-shield"/></svg>Seus dados, seu servidor</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FEATURES ================= -->
+  <section class="block" id="funcionalidades">
+    <div class="wrap">
+      <div class="head">
+        <div class="eyebrow">Funcionalidades</div>
+        <h2>Tudo o que você usa no Mobills ou no Organizze. No seu servidor.</h2>
+        <p>Do orçamento da casa ao caixa da empresa, sem assinatura e sem entregar seus extratos para ninguém.</p>
+      </div>
+      <div class="grid g3">
+        <article class="card">
+          <div class="ico"><svg><use href="#i-card"/></svg></div>
+          <h3>Contas e cartões</h3>
+          <p>Contas, cartões com faturas e parcelamento, transferências e contas a pagar e a receber com calendário de vencimentos.</p>
+        </article>
+        <article class="card">
+          <div class="ico"><svg><use href="#i-chart"/></svg></div>
+          <h3>Análise</h3>
+          <p>Dashboard, projeção de fluxo de caixa com alerta de saldo negativo, orçamentos, metas e relatórios em Excel, PDF e CSV.</p>
+        </article>
+        <article class="card">
+          <div class="ico"><svg><use href="#i-repeat"/></svg></div>
+          <h3>Automação</h3>
+          <p>Recorrências, importação de extratos OFX/CSV dos bancos brasileiros com deduplicação e categorização automática.</p>
+        </article>
+        <article class="card">
+          <div class="ico"><svg><use href="#i-users"/></svg></div>
+          <h3>Multi-organização</h3>
+          <p>Pessoal, família e empresa na mesma instância, com dados isolados, papéis (owner, admin, member, viewer) e convites.</p>
+        </article>
+        <article class="card">
+          <div class="ico"><svg><use href="#i-lock"/></svg></div>
+          <h3>Segurança</h3>
+          <p>2FA, criptografia de campo AES-256-GCM, audit log e ferramentas de LGPD para exportar e excluir a conta.</p>
+        </article>
+        <article class="card">
+          <div class="ico"><svg><use href="#i-phone"/></svg></div>
+          <h3>Em qualquer tela</h3>
+          <p>PWA instalável, modo escuro, modo privacidade que oculta valores e interface em pt-BR, inglês e espanhol.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= HOW IT WORKS ================= -->
+  <section class="block alt" id="como-funciona">
+    <div class="wrap">
+      <div class="head">
+        <div class="eyebrow">Como funciona</div>
+        <h2>Três comandos. Está rodando.</h2>
+        <p>Zero conta na nuvem, zero cartão de crédito, zero dado seu pra ninguém.</p>
+      </div>
+      <div class="grid g3">
+        <article class="card step">
+          <div class="top"><span class="num">01</span><div class="ico"><svg><use href="#i-branch"/></svg></div></div>
+          <h3>Clone</h3>
+          <p>Pegue o código do repositório oficial. AGPL-3.0, sem chave de licença.</p>
+          <div class="term">
+            <div class="term-box">
+              <div class="term-bar"><i></i><i></i><i></i><span class="lbl">bash</span><button class="copy" type="button" data-copy="git clone https://github.com/diego-luz/finance.sh && cd finance.sh" aria-label="Copiar comando"><svg><use href="#i-copy"/></svg></button></div>
+              <pre><span class="ps">$ </span>git clone https://github.com/diego-luz/finance.sh
+<span class="ps">$ </span>cd finance.sh</pre>
+            </div>
+          </div>
+        </article>
+        <article class="card step">
+          <div class="top"><span class="num">02</span><div class="ico"><svg><use href="#i-box"/></svg></div></div>
+          <h3>Deploy</h3>
+          <p>Gere o <code>.env</code> com segredos próprios da sua instalação e suba o stack num comando.</p>
+          <div class="term">
+            <div class="term-box">
+              <div class="term-bar"><i></i><i></i><i></i><span class="lbl">bash</span><button class="copy" type="button" data-copy="./scripts/gen-env.sh && docker compose up -d --build" aria-label="Copiar comando"><svg><use href="#i-copy"/></svg></button></div>
+              <pre><span class="ps">$ </span>./scripts/gen-env.sh
+<span class="ps">$ </span>docker compose up -d --build</pre>
+            </div>
+            <p class="note"># 2 containers: app + Postgres</p>
+          </div>
+        </article>
+        <article class="card step">
+          <div class="top"><span class="num">03</span><div class="ico"><svg><use href="#i-globe"/></svg></div></div>
+          <h3>Acesse</h3>
+          <p>Abra o navegador, informe o código de instalação do log e crie o primeiro admin pelo assistente.</p>
+          <div class="term">
+            <div class="term-box">
+              <div class="term-bar"><i></i><i></i><i></i><span class="lbl">bash</span><button class="copy" type="button" data-copy="docker compose logs app" aria-label="Copiar comando"><svg><use href="#i-copy"/></svg></button></div>
+              <pre><span class="ps">$ </span>docker compose logs app
+<span class="ps">$ </span>open http://localhost:8090</pre>
+            </div>
+            <p class="note"># Assistente inicial: admin, organização, idioma</p>
+          </div>
+        </article>
+      </div>
+      <p class="foot-note">Roda em qualquer host com Docker 24+: desktop, VPS, homelab, NAS ou Raspberry Pi. Sem dependência externa e sem telemetria.</p>
+    </div>
+  </section>
+
+  <!-- ================= GALLERY ================= -->
+  <section class="block" id="telas">
+    <div class="wrap">
+      <div class="head">
+        <div class="eyebrow">Telas</div>
+        <h2>Feito para o dia a dia</h2>
+        <p>Uma interface limpa, rápida e em português, do celular ao monitor grande.</p>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Telas do finance.sh" id="tabs"></div>
+      <div class="gallery-view">
+        <div class="frame">
+          <div class="frame-inner">
+            <img id="gallery-img" src="screenshots/10-projecao-fluxo.png" alt="" width="1440" height="900" loading="lazy" />
+          </div>
+        </div>
+        <p class="caption" id="gallery-cap" aria-live="polite"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= AUDIENCE ================= -->
+  <section class="block alt" id="pra-quem-e">
+    <div class="wrap">
+      <div class="head">
+        <div class="eyebrow">Pra quem é</div>
+        <h2>Brasileiro de fato</h2>
+        <p>pt-BR, real brasileiro, MEI e microempresa como casos de primeira classe — não como tradução.</p>
+      </div>
+      <div class="grid g4 who">
+        <article class="card">
+          <div class="ico"><svg><use href="#i-user"/></svg></div>
+          <h3>Pessoa física</h3>
+          <p>Orçamento mensal, cartões, metas e a projeção que avisa antes do saldo ficar negativo.</p>
+        </article>
+        <article class="card">
+          <div class="ico"><svg><use href="#i-briefcase"/></svg></div>
+          <h3>MEI</h3>
+          <p>Separe o dinheiro do CNPJ do pessoal, cada um na sua organização, na mesma instalação.</p>
+        </article>
+        <article class="card">
+          <div class="ico"><svg><use href="#i-building"/></svg></div>
+          <h3>Microempresa</h3>
+          <p>Contas a pagar e a receber, contatos, relatórios para o contador e acesso por papéis para a equipe.</p>
+        </article>
+        <article class="card">
+          <div class="ico"><svg><use href="#i-server"/></svg></div>
+          <h3>Homelab</h3>
+          <p>Um app + Postgres, backup simples do banco e nada saindo da sua rede.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SECURITY ================= -->
+  <section class="block" id="seguranca">
+    <div class="wrap sec">
+      <div class="head">
+        <div class="eyebrow">Segurança e LGPD</div>
+        <h2>Seus dados, suas regras</h2>
+        <p>Dinheiro é assunto sério. O finance.sh foi feito com segurança desde o primeiro commit, e todo o código pode ser auditado.</p>
+        <div class="links-inline">
+          <a class="btn" href="https://github.com/diego-luz/finance.sh/blob/main/docs/SECURITY.md">Modelo de segurança<svg><use href="#i-arrow"/></svg></a>
+          <a class="btn" href="https://github.com/diego-luz/finance.sh/blob/main/docs/LGPD.md">LGPD<svg><use href="#i-arrow"/></svg></a>
+        </div>
+      </div>
+      <div class="checks">
+        <div class="check"><svg><use href="#i-check"/></svg><div><b>2FA com TOTP</b><span>Com códigos de recuperação.</span></div></div>
+        <div class="check"><svg><use href="#i-check"/></svg><div><b>Criptografia de campo</b><span>AES-256-GCM em notas e segredos.</span></div></div>
+        <div class="check"><svg><use href="#i-check"/></svg><div><b>Audit log</b><span>Quem fez o quê, e quando.</span></div></div>
+        <div class="check"><svg><use href="#i-check"/></svg><div><b>Sem telemetria</b><span>Nada sai do seu servidor.</span></div></div>
+        <div class="check"><svg><use href="#i-check"/></svg><div><b>Exportar e excluir</b><span>Direitos do titular na LGPD.</span></div></div>
+        <div class="check"><svg><use href="#i-check"/></svg><div><b>Sem lock-in</b><span>OFX, CSV, JSON, PDF e Excel.</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FAQ ================= -->
+  <section class="block alt" id="faq">
+    <div class="wrap">
+      <div class="head">
+        <div class="eyebrow">FAQ</div>
+        <h2>Perguntas frequentes</h2>
+      </div>
+      <div class="faq">
+        <details>
+          <summary>É grátis mesmo?</summary>
+          <div class="ans">Sim. O finance.sh é software livre sob a licença AGPL-3.0: sem assinatura, sem chave de licença e sem limite de usuários. Você só paga, se quiser, pelo servidor onde ele roda.</div>
+        </details>
+        <details>
+          <summary>Preciso de um servidor? Do que preciso para rodar?</summary>
+          <div class="ans">De qualquer máquina com Docker 24+ e Compose v2: seu próprio computador, um NAS, um Raspberry Pi, um homelab ou uma VPS. São só dois containers (app + Postgres).</div>
+        </details>
+        <details>
+          <summary>Meus dados vão para algum lugar?</summary>
+          <div class="ans">Não. Tudo fica no banco Postgres da sua instalação. O finance.sh não tem telemetria e não depende de serviços externos para funcionar.</div>
+        </details>
+        <details>
+          <summary>Consigo importar o extrato do meu banco?</summary>
+          <div class="ans">Sim, por arquivos OFX ou CSV exportados do internet banking. A importação evita lançamentos duplicados e sugere a categoria com base em regras e no seu histórico.</div>
+        </details>
+        <details>
+          <summary>Dá para separar finanças pessoais e da empresa?</summary>
+          <div class="ans">Sim. Cada instalação suporta várias organizações (ex.: Casa, Família e Microempresa), com dados totalmente isolados e um seletor para alternar entre elas.</div>
+        </details>
+        <details>
+          <summary>E se eu quiser sair?</summary>
+          <div class="ans">Exporte tudo em OFX, CSV, JSON, PDF ou Excel quando quiser. O export em JSON também serve para migrar os dados para outra instalação.</div>
+        </details>
+        <details>
+          <summary>Esqueci a senha e não configurei e-mail. E agora?</summary>
+          <div class="ans">Dá para recuperar sem SMTP: pelo comando <code>-reset-password</code> no servidor, por um link impresso no log ou por um super-admin. Veja o <a href="https://github.com/diego-luz/finance.sh/blob/main/docs/INSTALACAO.md">guia de instalação</a>.</div>
+        </details>
+        <details>
+          <summary>Como posso contribuir?</summary>
+          <div class="ans">Issues e pull requests são bem-vindos. Comece pelo <a href="https://github.com/diego-luz/finance.sh/blob/main/CONTRIBUTING.md">guia de contribuição</a> e pelo <a href="https://github.com/diego-luz/finance.sh/blob/main/docs/ROADMAP.md">roadmap</a>. Deixar uma estrela no GitHub também ajuda o projeto a ser encontrado.</div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FINAL CTA ================= -->
+  <section class="block">
+    <div class="wrap">
+      <div class="final">
+        <h2>Suas finanças, no seu servidor.</h2>
+        <p>Instale em um minuto e comece hoje. Gratuito, aberto e em português.</p>
+        <div class="cta">
+          <a class="btn primary lg" href="https://github.com/diego-luz/finance.sh"><svg><use href="#i-github"/></svg>Ver no GitHub</a>
+          <a class="btn lg" href="https://github.com/diego-luz/finance.sh/blob/main/docs/INSTALACAO.md">Guia de instalação<svg><use href="#i-arrow"/></svg></a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap row">
+    <a class="brand" href="#main" style="font-size:17px"><img src="favicon.svg" alt="" width="26" height="26" style="width:26px;height:26px" />finance.sh</a>
+    <nav aria-label="Rodapé">
+      <a href="https://github.com/diego-luz/finance.sh">GitHub</a>
+      <a href="https://github.com/diego-luz/finance.sh/blob/main/docs/INSTALACAO.md">Instalação</a>
+      <a href="https://github.com/diego-luz/finance.sh/blob/main/docs/FUNCIONALIDADES.md">Funcionalidades</a>
+      <a href="https://github.com/diego-luz/finance.sh/releases">Releases</a>
+      <a href="https://github.com/diego-luz/finance.sh/blob/main/LICENSE">Licença AGPL-3.0</a>
+    </nav>
+    <span>Feito no Brasil 🇧🇷</span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+
+    // Theme toggle
+    var themeBtn = document.getElementById('theme');
+    function syncThemeIcon() {
+      var dark = root.getAttribute('data-theme') !== 'light';
+      themeBtn.querySelector('use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+      themeBtn.setAttribute('aria-label', dark ? 'Mudar para tema claro' : 'Mudar para tema escuro');
+    }
+    syncThemeIcon();
+    themeBtn.addEventListener('click', function () {
+      var next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('fsh-theme', next); } catch (e) {}
+      syncThemeIcon();
+    });
+
+    // Header border on scroll
+    var header = document.getElementById('top');
+    function onScroll() { header.classList.toggle('scrolled', window.scrollY > 8); }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    // Mobile menu
+    var menuBtn = document.getElementById('menu');
+    var menu = document.getElementById('mobile-menu');
+    function setMenu(open) {
+      menu.classList.toggle('open', open);
+      menuBtn.setAttribute('aria-expanded', String(open));
+    }
+    menuBtn.addEventListener('click', function () { setMenu(!menu.classList.contains('open')); });
+    menu.addEventListener('click', function (e) { if (e.target.closest('a')) setMenu(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setMenu(false); });
+
+    // Copy buttons
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-copy]');
+      if (!btn) return;
+      var text = btn.getAttribute('data-copy');
+      var done = function () {
+        btn.classList.add('ok');
+        btn.querySelector('use').setAttribute('href', '#i-check');
+        setTimeout(function () {
+          btn.classList.remove('ok');
+          btn.querySelector('use').setAttribute('href', '#i-copy');
+        }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {});
+      }
+    });
+
+    // Gallery
+    var shots = [
+      ['10-projecao-fluxo.png', 'Projeção de fluxo', 'Projeção de fluxo de caixa para os próximos meses, com alerta de saldo negativo.'],
+      ['05-cartoes-faturas.png', 'Cartões e faturas', 'Cartões de crédito com faturas, fechamento, vencimento e parcelamento.'],
+      ['03-transactions.png', 'Transações', 'Receitas, despesas e transferências com filtros, tags e busca.'],
+      ['12-contas-a-pagar.png', 'Contas a pagar', 'Contas a pagar e a receber com baixa e calendário de vencimentos.'],
+      ['11-orcamentos.png', 'Orçamentos', 'Orçamentos mensais por categoria, com o quanto já foi gasto.'],
+      ['06-relatorios.png', 'Relatórios', 'Relatórios com export em Excel, PDF e CSV.'],
+      ['13-recorrencias.png', 'Recorrências', 'Lançamentos recorrentes gerados automaticamente.']
+    ];
+    var tabs = document.getElementById('tabs');
+    var img = document.getElementById('gallery-img');
+    var cap = document.getElementById('gallery-cap');
+    function show(i) {
+      var s = shots[i];
+      img.src = 'screenshots/' + s[0];
+      img.alt = 'Tela de ' + s[1] + ' do finance.sh';
+      cap.textContent = s[2];
+      Array.prototype.forEach.call(tabs.children, function (t, j) {
+        t.setAttribute('aria-selected', String(j === i));
+        t.tabIndex = j === i ? 0 : -1;
+      });
+    }
+    shots.forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tab';
+      b.setAttribute('role', 'tab');
+      b.textContent = s[1];
+      b.addEventListener('click', function () { show(i); });
+      b.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        var n = (i + (e.key === 'ArrowRight' ? 1 : shots.length - 1)) % shots.length;
+        show(n);
+        tabs.children[n].focus();
+      });
+      tabs.appendChild(b);
+    });
+    show(0);
+  })();
+</script>
+</body>
+</html>

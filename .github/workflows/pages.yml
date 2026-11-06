@@ -1,0 +1,63 @@
+name: Landing page
+
+# Publishes site/ to GitHub Pages. The screenshots come from docs/screenshots
+# (site/screenshots is a symlink), so the landing always shows the same
+# screens as the README.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "docs/screenshots/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only one deploy at a time; never cancel one that is already publishing.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/screenshots
+          cp site/index.html site/favicon.svg _site/
+          # Only the screens the landing uses (keeps the artifact small).
+          for f in 02-dashboard 03-transactions 09-mobile-dashboard 05-cartoes-faturas 06-relatorios \
+                   10-projecao-fluxo 11-orcamentos 12-contas-a-pagar 13-recorrencias; do
+            cp "docs/screenshots/$f.png" _site/screenshots/
+          done
+          touch _site/.nojekyll
+
+      - name: Check that every referenced screenshot exists
+        run: |
+          grep -oE "screenshots/[A-Za-z0-9._-]+\.png|'[0-9a-z-]+\.png'" site/index.html \
+            | sed -E "s#screenshots/##; s#'##g" | sort -u \
+            | while read -r f; do test -f "_site/screenshots/$f" || { echo "faltando: $f"; exit 1; }; done
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

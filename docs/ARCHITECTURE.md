@@ -49,7 +49,7 @@ Fluxo: um **único binário Go** serve a SPA (embutida via `go:embed`) em `/` e 
 | **Frontend** | React 18 · TypeScript · Vite 6 · Tailwind CSS · React Query (TanStack) · Zustand · Axios · Recharts · React Router · React Hook Form + Zod · react-i18next · vite-plugin-pwa |
 | **Infra** | Docker · Docker Compose · SPA embutida no binário Go (`go:embed`, multi-stage build) · traga seu reverse proxy p/ TLS · GitHub Actions (CI + scans Trivy/gosec/govulncheck/gitleaks) |
 
-> A **landing page** (site de marketing) mora em **repositório/deploy separado** (Vercel/Netlify/Cloudflare Pages) e não faz parte deste stack. A SPA linka pra ela via `VITE_LANDING_URL` quando setado.
+> A **landing page** (site de marketing) fica em [`site/`](../site) e é publicada no **GitHub Pages** (<https://diego-luz.github.io/finance.sh/>) pelo workflow `.github/workflows/pages.yml`. É HTML estático, sem build, e não faz parte do stack Docker; os prints vêm de `docs/screenshots/`. A SPA linka pra ela via `VITE_LANDING_URL` quando setado.
 
 ### Estrutura do repositório
 
