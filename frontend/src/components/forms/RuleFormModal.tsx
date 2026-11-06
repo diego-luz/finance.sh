@@ -12,7 +12,7 @@ const schema = z.object({
   pattern: z.string().min(1, 'Informe a palavra-chave'),
   category_id: z.string().min(1, 'Selecione a categoria'),
   match_type: z.enum(['contains', 'prefix', 'regex']),
-  priority: z.coerce.number().int().min(0).max(9999),
+  priority: z.coerce.number<number>().int().min(0).max(9999),
   active: z.boolean(),
 });
 

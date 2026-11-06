@@ -20,7 +20,7 @@ const schema = z.object({
   password: z.string().min(8, 'A senha deve ter ao menos 8 caracteres'),
   currency: z.enum(currencyCodes),
   accepted_terms: z.literal(true, {
-    errorMap: () => ({ message: 'Você precisa aceitar os termos para continuar.' }),
+    error: 'Você precisa aceitar os termos para continuar.',
   }),
 });
 
