@@ -1,6 +1,7 @@
 package jwt_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -49,13 +50,16 @@ func TestParseTamperedToken(t *testing.T) {
 	tok, err := jwt.Generate(testUserID, testEmail, testSecret, time.Hour)
 	require.NoError(t, err)
 
-	// Flip the last character of the signature segment.
+	// Flip the first character of the signature segment. Not the last one:
+	// a 32-byte HS256 signature is 43 base64url chars, and the final char
+	// carries 2 padding bits, so swapping it (e.g. 'B' -> 'A') can decode to
+	// the very same signature and the token would still verify (flaky test).
 	b := []byte(tok)
-	last := b[len(b)-1]
-	if last == 'A' {
-		b[len(b)-1] = 'B'
+	i := strings.LastIndexByte(tok, '.') + 1
+	if b[i] == 'A' {
+		b[i] = 'B'
 	} else {
-		b[len(b)-1] = 'A'
+		b[i] = 'A'
 	}
 	tampered := string(b)
 
