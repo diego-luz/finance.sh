@@ -10,6 +10,7 @@ recuperar acesso. Variáveis de ambiente estão em
 - [Primeiro acesso](#primeiro-acesso)
 - [Desenvolvimento local sem Docker](#desenvolvimento-local-sem-docker)
 - [Reverse proxy (TLS)](#reverse-proxy-tls)
+- [Atualizar](#atualizar)
 - [Backups criptografados](#backups-criptografados)
 - [Esqueci a senha (sem SMTP)](#esqueci-a-senha-sem-smtp)
 
@@ -190,6 +191,46 @@ server {
 ```
 
 ---
+
+## Atualizar
+
+Um comando, na pasta da instalação:
+
+```bash
+sudo ./scripts/update.sh          # ou: sudo make update
+```
+
+Use `sudo` quando a pasta pertence ao `root` ou o seu usuário não está no grupo
+`docker`. O script mostra o que vai mudar, pede confirmação e então:
+
+1. **Faz backup do banco** antes de mexer em qualquer coisa: criptografado pelo
+   `scripts/backup.sh` quando há `BACKUP_PASSPHRASE` no `.env`; senão, um
+   `pg_dump` comum (permissão 600) em `backups/pre-update/`, mantendo os 10
+   últimos.
+2. **Atualiza o código** para o `origin/main`, mesmo que o histórico do
+   repositório tenha sido reescrito (onde um `git pull` falharia). Recusa se
+   houver alterações locais em arquivos do repositório; `.env` e arquivos fora
+   do git não são tocados.
+3. **Reconstrói só o app.** O Postgres e o volume de dados não são recriados.
+4. **Confere a saúde do app.** Se o build falhar, o app antigo continua no ar e
+   o código volta. Se o app novo não ficar saudável, ele **volta sozinho para a
+   versão anterior**.
+5. **Compara os dados**: a quantidade de registros de cada tabela antes e
+   depois, avisando se algo diminuiu.
+
+Também avisa quando o `docker-compose.yml` mudou, quando há migrações novas e
+quando o `.env.example` ganhou variáveis que o seu `.env` não tem.
+
+| Opção | Para quê |
+|---|---|
+| `--check` | Só diz se há atualização e o que muda; não altera nada |
+| `--yes` | Sem perguntas (cron, automação) |
+| `--rebuild` | Reconstrói mesmo já estando na versão mais recente |
+| `--branch NOME` | Segue outro branch em vez do `main` |
+| `--skip-backup` | Pula o backup (não recomendado) |
+
+Para voltar manualmente à versão anterior, o resumo final mostra o comando
+pronto (a imagem antiga fica guardada como `finance-sh-app:pre-update`).
 
 ## Backups criptografados
 

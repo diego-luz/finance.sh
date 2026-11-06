@@ -12,7 +12,7 @@ DB_NAME ?= finance_sh
 
 .PHONY: help env up down restart logs ps build seed db-shell \
         backend-dev frontend-dev backend-build frontend-build \
-        tidy lint test swagger clean fresh backup restore \
+        tidy lint test swagger clean fresh backup restore update \
 
 help: ## Show this help
 	@echo "finance.sh — make targets:"
@@ -84,6 +84,9 @@ backup: ## Encrypted pg_dump (needs BACKUP_PASSPHRASE; see scripts/backup.sh)
 
 restore: ## Restore an encrypted dump: make restore FILE=backups/<file>.sql.gpg
 	./scripts/restore.sh "$(FILE)"
+
+update: ## Update to the latest code: backup, rebuild, health check, auto-rollback
+	./scripts/update.sh
 
 # ---- Cleanup / reset --------------------------------------------------------
 clean: ## Stop stack, remove volumes, prune dangling volumes

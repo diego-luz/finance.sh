@@ -12,6 +12,11 @@ Formato baseado em [Keep a Changelog 1.1.0](https://keepachangelog.com/pt-BR/1.1
 
 Mudanças na `main` depois da 0.1.0, ainda sem versão.
 
+### Added
+
+- `scripts/update.sh` (`make update`): atualiza a instalação em um comando, com backup do banco antes, rebuild só do app, espera pelo health check, volta sozinho para a versão anterior se o app novo não subir e compara os registros de cada tabela antes e depois. Funciona mesmo com o histórico do repositório reescrito.
+- Landing page no GitHub Pages (`site/`), publicada pelo workflow `pages.yml`.
+
 ### Security
 
 - Duas rodadas de auditoria de segurança (PRs #1 e #3): código de instalação no primeiro acesso, rotação do refresh token com detecção de reuso e prazo máximo de sessão, códigos de 2FA e de recuperação de uso único, ativar 2FA pede a senha, bloqueio de login por e-mail e IP, convites só como hash, com validade e presos ao e-mail, `X-Forwarded-For` só de proxy confiável, limite por IP nas rotas de login, corpo JSON limitado a 1 MB, `Cache-Control: no-store` na API, `SEED=true` recusado em produção.

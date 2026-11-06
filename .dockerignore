@@ -30,3 +30,10 @@ backend/internal/web/dist
 
 # Docs site assets not needed at build (backend/docs IS copied explicitly)
 docs/screenshots
+
+# Database dumps (scripts/backup.sh, scripts/update.sh): never send them to the
+# builder, even though no COPY would pick them up.
+backups/
+
+# Landing page (GitHub Pages), not part of the app image
+site/
