@@ -12,11 +12,16 @@ Formato baseado em [Keep a Changelog 1.1.0](https://keepachangelog.com/pt-BR/1.1
 
 Mudanças na `main` depois da 0.1.0, ainda sem versão.
 
+### Added
+
+- Landing page no GitHub Pages (`site/`), publicada pelo workflow `pages.yml`.
+
 ### Security
 
 - Duas rodadas de auditoria de segurança (PRs #1 e #3): código de instalação no primeiro acesso, rotação do refresh token com detecção de reuso e prazo máximo de sessão, códigos de 2FA e de recuperação de uso único, ativar 2FA pede a senha, bloqueio de login por e-mail e IP, convites só como hash, com validade e presos ao e-mail, `X-Forwarded-For` só de proxy confiável, limite por IP nas rotas de login, corpo JSON limitado a 1 MB, `Cache-Control: no-store` na API, `SEED=true` recusado em produção.
 - Dependências atualizadas (golang-jwt, x/crypto, x/net, x/text, excelize, pgx, chi) e Go 1.26+; alertas de code scanning zerados, com os riscos aceitos e com validade no `.trivyignore` (PRs #5 e #6).
 - Canal de vulnerabilidades pelo reporte privado do GitHub (PR #8).
+- Dependências com vulnerabilidades corrigidas (PR #11): excelize 2.11.1 no backend; zod 4, `@hookform/resolvers` 5, follow-redirects e fast-uri no frontend.
 
 ### Fixed
 
@@ -26,12 +31,14 @@ Mudanças na `main` depois da 0.1.0, ainda sem versão.
 - Recorrência: sem duplicar em execuções simultâneas, sem mudar de dia no fim do mês, sem gerar em conta ou organização excluída.
 - Importação: OFX e CSV em Windows-1252, valores sem `float`, limite de 5.000 linhas lido em streaming.
 - Backup e restore: scripts executáveis, backup atômico, restore em transação única.
+- Teste `TestParseTamperedToken` instável: alterava o último caractere da assinatura JWT, que carrega bits de padding no base64url (PR #14).
 
 ### Changed
 
 - README enxuto, com instalação, configuração, funcionalidades e roadmap em `docs/` (PR #7).
 - `npm audit` no CI bloqueia só as dependências de produção (PR #4).
 - Frontend com testes de unidade (Vitest).
+- `react-router-dom` 6 substituído por `react-router` 7.18.5, que corrige dois advisories moderados (PR #12).
 
 ---
 
